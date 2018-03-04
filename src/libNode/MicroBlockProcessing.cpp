@@ -359,9 +359,7 @@ bool Node::RunConsensusOnMicroBlockWhenShardLeader()
             m_myShardMembersPubKeys,
             m_myShardMembersNetworkInfo,
             static_cast<unsigned char>(NODE),
-            static_cast<unsigned char>(MICROBLOCKCONSENSUS),
-            nodeMissingTxnsFunc,
-            commitFailureFunc
+            static_cast<unsigned char>(MICROBLOCKCONSENSUS)
         )
     );
 

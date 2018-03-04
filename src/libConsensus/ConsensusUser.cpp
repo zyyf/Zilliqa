@@ -92,10 +92,7 @@ bool ConsensusUser::ProcessSetLeader(const vector<unsigned char> & message, unsi
                 pubkeys,
                 peer_info,
                 static_cast<unsigned char>(MessageType::CONSENSUSUSER),
-                static_cast<unsigned char>(InstructionType::CONSENSUS),
-                std::function<bool(const vector<unsigned char> & errorMsg, unsigned int, 
-                                   const Peer & from)>(),
-                std::function<bool(map<unsigned int, vector<unsigned char>>)>()
+                static_cast<unsigned char>(InstructionType::CONSENSUS)
             )
         );
     }

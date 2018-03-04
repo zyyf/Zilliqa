@@ -90,12 +90,18 @@ ConsensusCommon::ConsensusCommon
     const deque<Peer> & peer_info,
     unsigned char class_byte,
     unsigned char ins_byte
-) : TOLERANCE_FRACTION((double) 0.667), m_blockHash(block_hash), m_myPrivKey(privkey), m_pubKeys(pubkeys), m_peerInfo(peer_info), m_responseMap(pubkeys.size(), false)
+) : m_blockHash(block_hash), m_myPrivKey(privkey), m_pubKeys(pubkeys), m_peerInfo(peer_info), m_subsetCollectiveSigs(NUM_CONSENSUS_SETS), m_responseMapSubsets(NUM_CONSENSUS_SETS)
 {
     m_consensusID = consensus_id;
     m_myID = my_id;
     m_classByte = class_byte;
     m_insByte = ins_byte;
+    m_finalSubsetID = pubkeys.size();
+
+    for (auto r : m_responseMapSubsets)
+    {
+        r.resize(pubkeys.size(), false);
+    }
 }
 
 ConsensusCommon::~ConsensusCommon()
@@ -228,6 +234,6 @@ uint16_t ConsensusCommon::RetrieveCollectiveSigBitmap(vector<unsigned char> & ds
         return 0;
     }
 
-    return SetBitVector(dst, offset, m_responseMap);
+    return SetBitVector(dst, offset, m_responseMapSubsets.at(m_finalSubsetID));
 }
 

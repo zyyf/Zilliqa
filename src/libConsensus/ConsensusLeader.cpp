@@ -25,7 +25,7 @@
 
 using namespace std;
 
-bool ConsensusLeader::CheckState(Action action)
+bool ConsensusLeader::CheckStateMain(Action action)
 {
     bool result = true;
 
@@ -38,18 +38,6 @@ bool ConsensusLeader::CheckState(Action action)
                     break;
                 case ANNOUNCE_DONE:
                 LOG_MESSAGE("Error: Doing announce but announce already done");
-                    result = false;
-                    break;
-                case CHALLENGE_DONE:
-                LOG_MESSAGE("Error: Doing announce but challenge already done");
-                    result = false;
-                    break;
-                case COLLECTIVESIG_DONE:
-                LOG_MESSAGE("Error: Doing announce but collectivesig already done");
-                    result = false;
-                    break;
-                case FINALCHALLENGE_DONE:
-                LOG_MESSAGE("Error: Doing announce but finalchallenge already done");
                     result = false;
                     break;
                 case DONE:
@@ -72,19 +60,6 @@ bool ConsensusLeader::CheckState(Action action)
                     break;
                 case ANNOUNCE_DONE:
                     break;
-                case CHALLENGE_DONE:
-                LOG_MESSAGE("Error: Processing commit but challenge already done");
-                    result = false;
-                    // LOG_MESSAGE("Processing redundant commit messages");
-                    break;
-                case COLLECTIVESIG_DONE:
-                LOG_MESSAGE("Error: Processing commit but collectivesig already done");
-                    result = false;
-                    break;
-                case FINALCHALLENGE_DONE:
-                LOG_MESSAGE("Error: Processing commit but finalchallenge already done");
-                    result = false;
-                    break;
                 case DONE:
                 LOG_MESSAGE("Error: Processing commit but consensus already done");
                     result = false;
@@ -96,8 +71,25 @@ bool ConsensusLeader::CheckState(Action action)
                     break;
             }
             break;
+        default:
+        LOG_MESSAGE("Error: Unrecognized action");
+            result = false;
+            break;
+    }
+
+    return result;
+}
+
+bool ConsensusLeader::CheckStateSubset(Action action, uint8_t subset_id)
+{
+    bool result = true;
+
+    ConsensusSubset & subset = m_consensusSubsets.at(subset_id);
+
+    switch(action)
+    {
         case PROCESS_RESPONSE:
-            switch(m_state)
+            switch(subset.m_state)
             {
                 case INITIAL:
                 LOG_MESSAGE("Error: Processing response but announce not yet done");
@@ -129,7 +121,7 @@ bool ConsensusLeader::CheckState(Action action)
             }
             break;
         case PROCESS_FINALCOMMIT:
-            switch(m_state)
+            switch(subset.m_state)
             {
                 case INITIAL:
                 LOG_MESSAGE("Error: Processing finalcommit but announce not yet done");
@@ -162,7 +154,7 @@ bool ConsensusLeader::CheckState(Action action)
             }
             break;
         case PROCESS_FINALRESPONSE:
-            switch(m_state)
+            switch(subset.m_state)
             {
                 case INITIAL:
                 LOG_MESSAGE("Error: Processing finalresponse but announce not yet done");
@@ -202,6 +194,90 @@ bool ConsensusLeader::CheckState(Action action)
     return result;
 }
 
+void ConsensusLeader::GenerateConsensusLists()
+{
+    {
+        lock_guard<mutex> g(m_mutex);
+
+        // Get the list of all the peers who committed, by peer index
+        vector<unsigned int> peersWhoCommitted;
+        for (unsigned int index = 0; index < m_commitPointMap.size(); index++)
+        {
+            if (m_commitPointMap.at(index).Initialized())
+            {
+                peersWhoCommitted.push_back(index);
+            }
+        }
+
+        // Generate NUM_CONSENSUS_SETS lists = subsets of peersWhoCommitted
+        for (unsigned int i = 0; i < NUM_CONSENSUS_SETS; i++)
+        {
+            m_consensusSubsets.push_back(ConsensusSubset());
+
+            ConsensusSubset & subset = m_consensusSubsets.back();
+            subset.m_commitMap.resize(m_pubKeys.size());
+            subset.m_commitPointMap.resize(m_pubKeys.size());
+            subset.m_commitPoints.clear();
+            subset.m_responseData.clear();
+            subset.m_state = ANNOUNCE_DONE;
+
+            for (unsigned int j = 0; j < m_numForConsensus; j++)
+            {
+                unsigned int index = peersWhoCommitted.at(j);
+                subset.m_commitMap.at(index) = true;
+                subset.m_commitPointMap.at(index) = m_commitPointMap.at(index);
+                subset.m_commitPoints.push_back(subset.m_commitPointMap.at(index));
+            }
+
+            random_shuffle(peersWhoCommitted.begin(), peersWhoCommitted.end());
+        }
+
+        // Clear out the original commit map, we don't need it anymore at this point
+        m_commitPointMap.clear();
+    }
+
+    lock_guard<mutex> g(m_commitProcessingStateMutex);    
+    m_commitProcessingState = COMMIT_LISTS_GENERATED;
+}
+
+void ConsensusLeader::InitiateConsensusListChallenges()
+{
+    for (unsigned int index = 0; index < m_consensusSubsets.size(); index++)
+    {
+        ConsensusSubset & subset = m_consensusSubsets.at(index);
+        vector<unsigned char> challenge = { m_classByte, m_insByte, static_cast<unsigned char>(ConsensusMessageType::CHALLENGE) };
+        bool result = GenerateChallengeMessage(challenge, MessageOffset::BODY + sizeof(unsigned char), (uint8_t)index, PROCESS_COMMIT);
+
+        if (result == true)
+        {
+            // Multicast to all nodes in this subset who sent validated commits
+            // ================================================================
+
+            vector<Peer> commit_peers;
+            deque<Peer>::const_iterator j = m_peerInfo.begin();
+            for (unsigned int i = 0; i < subset.m_commitMap.size(); i++, j++)
+            {
+                if (subset.m_commitMap.at(i) == true)
+                {
+                    commit_peers.push_back(*j);
+                }
+            }
+            P2PComm::GetInstance().SendMessage(commit_peers, challenge);
+
+            // Update subset's internal state (Let's avoid holding a mutex here)
+            // =================================================================
+
+            subset.m_state = CHALLENGE_DONE;
+        }
+    }
+
+    // Update overall internal state
+    // =============================
+
+    lock_guard<mutex> g(m_mutex);
+    m_state = CHALLENGE_DONE;
+}
+
 bool ConsensusLeader::ProcessMessageCommitCore(const vector<unsigned char> & commit, unsigned int offset, Action action, ConsensusMessageType returnmsgtype, State nextstate)
 {
     LOG_MARKER();
@@ -209,7 +285,7 @@ bool ConsensusLeader::ProcessMessageCommitCore(const vector<unsigned char> & com
     // Initial checks
     // ==============
 
-    if (!CheckState(action))
+    if (!CheckStateMain(action))
     {
         return false;
     }
@@ -217,10 +293,11 @@ bool ConsensusLeader::ProcessMessageCommitCore(const vector<unsigned char> & com
     // Extract and check commit message body
     // =====================================
 
-    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [33-byte commit] [64-byte signature]
+    // Format Commit: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [33-byte commit] [64-byte signature]
+    // Format FinalCommit: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [1-byte subset id] [33-byte commit] [64-byte signature]
 
     const unsigned int length_available = commit.size() - offset;
-    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + COMMIT_POINT_SIZE + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
+    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + (action == PROCESS_FINALCOMMIT ? sizeof(uint8_t) : 0) + COMMIT_POINT_SIZE + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
 
     if (length_needed > length_available)
     {
@@ -255,16 +332,54 @@ bool ConsensusLeader::ProcessMessageCommitCore(const vector<unsigned char> & com
     uint16_t backup_id = Serializable::GetNumber<uint16_t>(commit, curr_offset, sizeof(uint16_t));
     curr_offset += sizeof(uint16_t);
 
-    // Check the backup id
-    if (backup_id >= m_commitMap.size())
+    uint8_t subset_id = 0;
+
+    if (action == PROCESS_COMMIT)
     {
-        LOG_MESSAGE("Error: Backup ID beyond backup count");
-        return false;
+        // Check the backup id
+        if (backup_id >= m_commitPointMap.size())
+        {
+            LOG_MESSAGE("Error: Backup ID beyond backup count");
+            return false;
+        }
+        if (m_commitPointMap.at(backup_id).Initialized() == true)
+        {
+            LOG_MESSAGE("Error: Backup has already sent validated commit");
+            return false;
+        }
     }
-    if (m_commitMap.at(backup_id) == true)
+    else
     {
-        LOG_MESSAGE("Error: Backup has already sent validated commit");
-        return false;
+        // 1-byte subset id
+        subset_id = Serializable::GetNumber<uint8_t>(commit, curr_offset, sizeof(uint8_t));
+        curr_offset += sizeof(uint8_t);
+
+        // Check subset state
+        if (!CheckStateSubset(action, subset_id))
+        {
+            return false;
+        }
+
+        ConsensusSubset & subset = m_consensusSubsets.at(subset_id);
+
+        // Check the backup id
+        if (backup_id >= subset.m_commitMap.size())
+        {
+            LOG_MESSAGE("Error: Backup ID beyond backup count");
+            return false;
+        }
+        if (subset.m_commitMap.at(backup_id) == true)
+        {
+            LOG_MESSAGE("Error: Backup has already sent validated commit");
+            return false;
+        }
+
+        // Check if this backup was part of the first round commit
+        if (m_responseMapSubsets.at(subset_id).at(backup_id) == false)
+        {
+            LOG_MESSAGE("Error: Backup has not participated in the commit phase");
+            return false;
+        }
     }
 
     // 33-byte commit - skip for now, deserialize later below
@@ -281,319 +396,133 @@ bool ConsensusLeader::ProcessMessageCommitCore(const vector<unsigned char> & com
         return false;
     }
 
-    bool result = false;
     {
-        // Update internal state
-        // =====================
         lock_guard<mutex> g(m_mutex);
 
-        if (!CheckState(action))
+        if (!CheckStateMain(action))
         {
             return false;
         }
 
-        // 33-byte commit
-        if (m_commitCounter < m_numForConsensus)
+        if (action == PROCESS_COMMIT)
         {
-            m_commitPoints.push_back(CommitPoint(commit, curr_offset - COMMIT_POINT_SIZE));
+            // 33-byte commit
             m_commitPointMap.at(backup_id) = CommitPoint(commit, curr_offset - COMMIT_POINT_SIZE);
-            m_commitMap.at(backup_id) = true;
-        }
-        m_commitCounter++;
+            m_commitCounter++;
 
-        if (m_commitCounter % 10 == 0)
-        {
-            LOG_MESSAGE("Received " << m_commitCounter << " out of " << m_numForConsensus << ".");
-        }
-
-        // Generate challenge if sufficient commits have been obtained
-        // ===========================================================
-
-        if (m_commitCounter == m_numForConsensus)
-        {
-            LOG_MESSAGE("Sufficient " << m_numForConsensus << " commits obtained");
-
-            vector<unsigned char> challenge = { m_classByte, m_insByte, static_cast<unsigned char>(returnmsgtype) };
-            result = GenerateChallengeMessage(challenge, MessageOffset::BODY + sizeof(unsigned char));
-            if (result == true)
+            if (m_commitCounter % 10 == 0)
             {
-                // Update internal state
-                // =====================
-
-                m_state = nextstate;
-
-                // Multicast to all nodes who send validated commits
-                // =================================================
-
-                vector<Peer> commit_peers;
-                deque<Peer>::const_iterator j = m_peerInfo.begin();
-                for (unsigned int i = 0; i < m_commitMap.size(); i++, j++)
-                {
-                    if (m_commitMap.at(i) == true)
-                    {
-                        commit_peers.push_back(*j);
-                    }
-                }
-                P2PComm::GetInstance().SendMessage(commit_peers, challenge);
+                LOG_MESSAGE("Received " << m_commitCounter << " out of " << m_numForConsensus << ".");
             }
         }
-
-        // Redundant commits
-        if (m_commitCounter > m_numForConsensus)
+        else
         {
-            m_commitRedundantPointMap.at(backup_id) = CommitPoint(commit, curr_offset - COMMIT_POINT_SIZE);
-            m_commitRedundantMap.at(backup_id) = true;
-            m_commitRedundantCounter++;
-        }
-    }
-#if 0
-    if (m_commitCounter == m_numForConsensus)
-    {
-        // Set a timer for collecting responses
-        // auto main_func = []() -> void {
-        //     LOG_MESSAGE("Timer for collecting responses is triggered");
-        // };
-        // auto check_response_func = [this]() mutable -> void {
-        //     if (m_responseCounter < m_numForConsensus)
-        //     {
-        //         LOG_MESSAGE("# responses not reaches the threshold");
-        //     }
-        //     LOG_MESSAGE("# responses reaches the threshold");
-        // };
-        // TimeLockedFunction tlf(1, main_func, check_response_func, true);
-
-        LOG_MESSAGE("Process the threshold");
-
-        for (unsigned int i = 0; i < 6000; i++)
-        {
-            this_thread::sleep_for(chrono::milliseconds(1000));
-
-            if (a_State > nextstate)
+            if (!CheckStateSubset(action, subset_id))
             {
-                LOG_MESSAGE("# responses reaches the threshold");
-                break;
+                return false;
             }
-        }
 
-        if (a_State == nextstate)
-        {
-            if (m_responseCounter < m_numForConsensus)
+            ConsensusSubset & subset = m_consensusSubsets.at(subset_id);
+
+            // 33-byte commit
+            subset.m_commitPointMap.at(backup_id) = CommitPoint(commit, curr_offset - COMMIT_POINT_SIZE);
+            subset.m_commitPoints.push_back(CommitPoint(commit, curr_offset - COMMIT_POINT_SIZE));
+
+            if (subset.m_commitPoints.size() % 10 == 0)
             {
-                LOG_MESSAGE("# responses does not reach the threshold");
-                LOG_MESSAGE("Insufficient responses obtained");
+                LOG_MESSAGE("Subset " << subset_id << " - Received " << subset.m_commitPoints.size() << " out of " << m_numForConsensus << ".");
+            }
 
-                // Update internal state
-                // =====================
-                lock_guard<mutex> g(m_mutex);
+            if (subset.m_commitPoints.size() == subset.m_responseData.size())
+            {
+                vector<unsigned char> challenge = { m_classByte, m_insByte, static_cast<unsigned char>(ConsensusMessageType::FINALCHALLENGE) };
+                bool result = GenerateChallengeMessage(challenge, MessageOffset::BODY + sizeof(unsigned char), subset_id, PROCESS_FINALCOMMIT);
 
-                if (m_commitRedundantCounter <= 0)
+                if (result == true)
                 {
-                    LOG_MESSAGE("No redundant commit messages");
-                    return false;
-                }
+                    // Multicast to all nodes in this subset
+                    // =====================================
 
-                // Regenerate challenge
-                m_commitCounter = 0;
-                m_commitPoints.clear();
-
-                m_responseCounter = 0;
-                m_responseData.clear();
-                fill(m_responseMap.begin(), m_responseMap.end(), false);
-
-                for (unsigned int i = 0; i < m_commitMap.size(); i++)
-                {
-                    if ((m_commitMap.at(i) == true) && (m_responseMap.at(i) == true))
+                    vector<Peer> commit_peers;
+                    deque<Peer>::const_iterator j = m_peerInfo.begin();
+                    for (unsigned int i = 0; i < subset.m_commitMap.size(); i++, j++)
                     {
-                        m_commitPoints.push_back(m_commitPointMap.at(i));
-                        m_commitCounter++;
-                    }
-                    if ((m_commitMap.at(i) == true) && (m_responseMap.at(i) == false))
-                    {
-                        // Put node i into the blacklist
-                        LOG_MESSAGE("Peer " << i << " is malicious");
-                        m_commitMap.at(i) = false;
-                    }
-                }
-                for (unsigned int i = 0; i < m_commitRedundantMap.size(); i++)
-                {
-                    if (m_commitCounter < m_numForConsensus)
-                    {
-                        if (m_commitRedundantMap.at(i) == true)
+                        if (subset.m_commitMap.at(i) == true)
                         {
-                            m_commitPoints.push_back(m_commitRedundantPointMap.at(i));
-                            m_commitCounter++;
-                            m_commitMap.at(i) = true;
-                            m_commitRedundantMap.at(i) = false;
-                            m_commitRedundantCounter--;
+                            commit_peers.push_back(*j);
                         }
                     }
-                }
+                    P2PComm::GetInstance().SendMessage(commit_peers, challenge);
 
-                if (m_commitCounter < m_numForConsensus)
-                {
-                    LOG_MESSAGE("No sufficient redundant commit messages");
-                    return false;
-                }
+                    // Update subset internal state
+                    // ============================
 
-                if (m_commitCounter == m_numForConsensus)
-                {
-                    LOG_MESSAGE("Sufficient redundant commit messages");
-                    // result = true;
-                    vector<unsigned char> challenge = { m_classByte, m_insByte, static_cast<unsigned char>(returnmsgtype) };
-                    result = GenerateChallengeMessage(challenge, MessageOffset::BODY + sizeof(unsigned char));
-                    if (result == true)
-                    {
-                        // Update internal state
-                        // =====================
+                    subset.m_state = FINALCHALLENGE_DONE;
 
-                        a_State = nextstate;
-
-                        // Multicast to all nodes who send validated commits
-                        // =================================================
-
-                        vector<Peer> commit_peers;
-                        for (unsigned int i = 0; i < m_commitMap.size(); i++)
-                        {
-                            if (m_commitMap.at(i) == true)
-                            {
-                                commit_peers.push_back(m_peerInfo.at(i));
-                            }
-                        }
-                        P2PComm::GetInstance().SendMessage(commit_peers, challenge);
-                    }
+                    subset.m_responseData.clear();
                 }
             }
         }
-    }
-#endif
-    return result;
-}
-
-bool ConsensusLeader::ProcessMessageCommit(const vector<unsigned char> & commit, unsigned int offset)
-{
-    LOG_MARKER();
-    return ProcessMessageCommitCore(commit, offset, PROCESS_COMMIT, CHALLENGE, CHALLENGE_DONE);
-}
-
-bool ConsensusLeader::ProcessMessageCommitFailure(const vector<unsigned char> & commitFailureMsg,
-                                                  unsigned int offset, const Peer & from)
-{
-    LOG_MARKER();
-
-    if (!CheckState(PROCESS_COMMIT))
-    {
-        return false;
-    }
-
-    const unsigned int length_available = commitFailureMsg.size() - offset;
-    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t);
-
-    if (length_needed > length_available)
-    {
-        LOG_MESSAGE("Error: Malformed message");
-        return false;
-    }
-
-    unsigned int curr_offset = offset;
-
-    // 4-byte consensus id
-    uint32_t consensus_id = Serializable::GetNumber<uint32_t>(commitFailureMsg, curr_offset, 
-                                                              sizeof(uint32_t));
-    curr_offset += sizeof(uint32_t);
-
-    // Check the consensus id
-    if (consensus_id != m_consensusID)
-    {
-        LOG_MESSAGE("Error: Consensus ID in commitment (" << consensus_id << ") does not match " <<
-                    "instance consensus ID (" << m_consensusID << ")");
-        return false;
-    }
-
-    // 32-byte blockhash
-
-    // Check the block hash
-    if (equal(m_blockHash.begin(), m_blockHash.end(),
-        commitFailureMsg.begin() + curr_offset) == false)
-    {
-        LOG_MESSAGE("Error: Block hash in commitment does not match instance block hash");
-        return false;
-    }
-    curr_offset += BLOCK_HASH_SIZE;
-
-    // 2-byte backup id
-    uint16_t backup_id = Serializable::GetNumber<uint16_t>(commitFailureMsg, curr_offset,
-                                                           sizeof(uint16_t));
-    curr_offset += sizeof(uint16_t);
-
-    // Check the backup id
-    if (backup_id >= m_commitMap.size()) // using commitMap instead of commitFailureMap knowingly since its size = puKeys.size() for sure
-    {
-        LOG_MESSAGE("Error: Backup ID beyond backup count");
-        return false;
-    }
-    
-    if (m_commitFailureMap.find(backup_id) != m_commitFailureMap.end())
-    {
-        LOG_MESSAGE("Error: Backup has already sent commit failure message");
-        return false;
-    }
-
-    m_commitFailureCounter++;
-    m_commitFailureMap[backup_id] = vector<unsigned char>(commitFailureMsg.begin() + curr_offset, 
-                                                          commitFailureMsg.end());
-
-    m_nodeCommitFailureHandlerFunc(commitFailureMsg, curr_offset, from);
-
-    if (m_commitFailureCounter == m_numForConsensusFailure)
-    {
-        m_state = INITIAL;
-
-        vector<unsigned char> consensusFailureMsg = { m_classByte, m_insByte, CONSENSUSFAILURE };
-        P2PComm::GetInstance().SendMessage(m_peerInfo, consensusFailureMsg);
-
-        auto main_func = [this]() mutable -> void { 
-            m_shardCommitFailureHandlerFunc(m_commitFailureMap);
-        };   
-        DetachedFunction(1, main_func); 
-        // LOG_MESSAGE("Sufficient " << m_numForConsensus << " commits obtained");
-
-        // vector<unsigned char> challenge = { m_classByte, m_insByte, static_cast<unsigned char>(returnmsgtype) };
-        // result = GenerateChallengeMessage(challenge, MessageOffset::BODY + sizeof(unsigned char));
-        // if (result == true)
-        // {
-        //     // Update internal state
-        //     // =====================
-
-        //     m_state = nextstate;
-
-        //     // Multicast to all nodes who send validated commits
-        //     // =================================================
-
-        //     vector<Peer> commit_peers;
-        //     deque<Peer>::const_iterator j = m_peerInfo.begin();
-        //     for (unsigned int i = 0; i < m_commitMap.size(); i++, j++)
-        //     {
-        //         if (m_commitMap.at(i) == true)
-        //         {
-        //             commit_peers.push_back(*j);
-        //         }
-        //     }
-        //     P2PComm::GetInstance().SendMessage(commit_peers, challenge);
-        // }
     }
 
     return true;
 }
 
-bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char> & challenge, unsigned int offset)
+bool ConsensusLeader::ProcessMessageCommit(const vector<unsigned char> & commit, unsigned int offset)
+{
+    LOG_MARKER();
+
+    bool processThisCommit = false;
+    CommitProcessingState procState;
+
+    {
+        lock_guard<mutex> g(m_commitProcessingStateMutex);
+        procState = m_commitProcessingState;
+    }
+
+    switch(procState)
+    {
+        case ACCEPTING_COMMITS:
+            processThisCommit = true;
+            break;
+        case COMMIT_TIMER_EXPIRED:
+            if (m_commitCounter < m_numForConsensus)
+            {
+                LOG_MESSAGE("Error: Insufficient commits. Required = " << m_numForConsensus << " Actual = " << m_commitCounter);
+                m_state = ERROR;
+            }
+            else
+            {
+                LOG_MESSAGE("Sufficient commits obtained. Required = " << m_numForConsensus << " Actual = " << m_commitCounter);
+                GenerateConsensusLists();
+                InitiateConsensusListChallenges();
+            }
+            break;
+        case COMMIT_LISTS_GENERATED:
+        default:
+            break;
+    }
+
+    if (processThisCommit)
+    {
+        processThisCommit = ProcessMessageCommitCore(commit, offset, PROCESS_COMMIT, CHALLENGE, CHALLENGE_DONE);
+    }
+
+    return processThisCommit;
+}
+
+
+bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char> & challenge, unsigned int offset, uint8_t subset_id, Action action)
 {
     LOG_MARKER();
 
     // Generate challenge object
     // =========================
 
+    ConsensusSubset & subset = m_consensusSubsets.at(subset_id);
+
     // Aggregate commits
-    CommitPoint aggregated_commit = AggregateCommits(m_commitPoints);
+    CommitPoint aggregated_commit = AggregateCommits(subset.m_commitPoints);
     if (aggregated_commit.Initialized() == false)
     {
         LOG_MESSAGE("Error: AggregateCommits failed");
@@ -602,7 +531,7 @@ bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char> & challenge
     }
 
     // Aggregate keys
-    PubKey aggregated_key = AggregateKeys(m_commitMap);
+    PubKey aggregated_key = AggregateKeys(subset.m_commitMap);
     if (aggregated_key.Initialized() == false)
     {
         LOG_MESSAGE("Error: Aggregated key generation failed");
@@ -611,8 +540,16 @@ bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char> & challenge
     }
 
     // Generate the challenge
-    m_challenge = GetChallenge(m_message, 0, m_message.size(), aggregated_commit, aggregated_key);
-    if (m_challenge.Initialized() == false)
+    if (action == PROCESS_COMMIT)
+    {
+        subset.m_challenge = GetChallenge(m_message, 0, m_message.size(), aggregated_commit, aggregated_key);
+    }
+    else
+    {
+        subset.m_challenge = GetChallenge(subset.m_message, 0, subset.m_message.size(), aggregated_commit, aggregated_key);
+    }
+
+    if (subset.m_challenge.Initialized() == false)
     {
         LOG_MESSAGE("Error: Challenge generation failed");
         m_state = ERROR;
@@ -622,8 +559,8 @@ bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char> & challenge
     // Assemble challenge message body
     // ===============================
 
-    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [33-byte aggregated commit] [33-byte aggregated key] [32-byte challenge] [64-byte signature]
-    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [33-byte aggregated commit] [33-byte aggregated key] [32-byte challenge]
+    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [1-byte subset id] [33-byte aggregated commit] [33-byte aggregated key] [32-byte challenge] [64-byte signature]
+    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [1-byte subset id] [33-byte aggregated commit] [33-byte aggregated key] [32-byte challenge]
 
     unsigned int curr_offset = offset;
 
@@ -639,6 +576,10 @@ bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char> & challenge
     Serializable::SetNumber<uint16_t>(challenge, curr_offset, m_myID, sizeof(uint16_t));
     curr_offset += sizeof(uint16_t);
 
+    // 1-byte subset ID
+    Serializable::SetNumber<uint8_t>(challenge, curr_offset, subset_id, sizeof(uint8_t));
+    curr_offset += sizeof(uint8_t);
+
     // 33-byte aggregated commit
     aggregated_commit.Serialize(challenge, curr_offset);
     curr_offset += COMMIT_POINT_SIZE;
@@ -648,7 +589,7 @@ bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char> & challenge
     curr_offset += PUB_KEY_SIZE;
 
     // 32-byte challenge
-    m_challenge.Serialize(challenge, curr_offset);
+    subset.m_challenge.Serialize(challenge, curr_offset);
     curr_offset += CHALLENGE_SIZE;
 
     // 64-byte signature
@@ -671,7 +612,7 @@ bool ConsensusLeader::ProcessMessageResponseCore(const vector<unsigned char> & r
     // Initial checks
     // ==============
 
-    if (!CheckState(action))
+    if (!CheckStateMain(action))
     {
         return false;
     }
@@ -679,10 +620,10 @@ bool ConsensusLeader::ProcessMessageResponseCore(const vector<unsigned char> & r
     // Extract and check response message body
     // =======================================
 
-    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [32-byte response] [64-byte signature]
+    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [1-byte subset id] [32-byte response] [64-byte signature]
 
     const unsigned int length_available = response.size() - offset;
-    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + RESPONSE_SIZE + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
+    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + sizeof(uint8_t) + RESPONSE_SIZE + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
 
     if (length_needed > length_available)
     {
@@ -717,18 +658,38 @@ bool ConsensusLeader::ProcessMessageResponseCore(const vector<unsigned char> & r
     uint32_t backup_id = Serializable::GetNumber<uint16_t>(response, curr_offset, sizeof(uint16_t));
     curr_offset += sizeof(uint16_t);
 
+    // 1-byte subset id
+    uint8_t subset_id = Serializable::GetNumber<uint8_t>(response, curr_offset, sizeof(uint8_t));
+    curr_offset += sizeof(uint8_t);
+
+    // Check the subset id
+    if (subset_id >= NUM_CONSENSUS_SETS)
+    {
+        LOG_MESSAGE("Error: Subset ID >= NUM_CONSENSUS_SETS");
+        return false;
+    }
+
+    // Check subset state
+    if (!CheckStateSubset(action, subset_id))
+    {
+        return false;
+    }
+
+    ConsensusSubset & subset = m_consensusSubsets.at(subset_id);
+    vector<bool> & subsetResponseMap = m_responseMapSubsets.at(subset_id);
+
     // Check the backup id
-    if (backup_id >= m_responseMap.size())
+    if (backup_id >= subsetResponseMap.size())
     {
         LOG_MESSAGE("Error: Backup ID beyond backup count");
         return false;
     }
-    if (m_commitMap.at(backup_id) == false)
+    if (subset.m_commitMap.at(backup_id) == false)
     {
         LOG_MESSAGE("Error: Backup has not participated in the commit phase");
         return false;
     }
-    if (m_responseMap.at(backup_id) == true)
+    if (subsetResponseMap.at(backup_id) == true)
     {
         LOG_MESSAGE("Error: Backup has already sent validated response");
         return false;
@@ -738,7 +699,7 @@ bool ConsensusLeader::ProcessMessageResponseCore(const vector<unsigned char> & r
     Response tmp_response = Response(response, curr_offset);
     curr_offset += RESPONSE_SIZE;
 
-    if (MultiSig::VerifyResponse(tmp_response, m_challenge, m_pubKeys.at(backup_id), m_commitPointMap.at(backup_id)) == false)
+    if (MultiSig::VerifyResponse(tmp_response, subset.m_challenge, m_pubKeys.at(backup_id), subset.m_commitPointMap.at(backup_id)) == false)
     {
         LOG_MESSAGE("Error: Invalid response for this backup");
         return false;
@@ -760,66 +721,76 @@ bool ConsensusLeader::ProcessMessageResponseCore(const vector<unsigned char> & r
 
     lock_guard<mutex> g(m_mutex);
 
-    if (!CheckState(action))
+    if (!CheckStateMain(action))
+    {
+        return false;
+    }
+
+    if (!CheckStateSubset(action, subset_id))
     {
         return false;
     }
 
     // 32-byte response
-    m_responseData.push_back(tmp_response);
-    m_responseDataMap.at(backup_id) = tmp_response;
-    m_responseMap.at(backup_id) = true;
-    m_responseCounter++;
+    subset.m_responseData.push_back(tmp_response);
+    subsetResponseMap.at(backup_id) = true;
 
-    // Generate collective sig if sufficient responses have been obtained
-    // ==================================================================
+    // Generate collective sig if everyone has responded
+    // =================================================
 
     bool result = true;
 
-    if (m_responseCounter == m_numForConsensus)
+    if (subset.m_responseData.size() == subset.m_commitPoints.size())
     {
-        LOG_MESSAGE("Sufficient responses obtained");
+        LOG_MESSAGE("All responses obtained for subset " << subset_id);
 
-        vector<unsigned char> collectivesig = { m_classByte, m_insByte,
-                                                static_cast<unsigned char>(returnmsgtype) };
-        result = GenerateCollectiveSigMessage(collectivesig, 
-                                              MessageOffset::BODY + sizeof(unsigned char));
+        vector<unsigned char> collectivesig = { m_classByte, m_insByte, static_cast<unsigned char>(returnmsgtype) };
+        result = GenerateCollectiveSigMessage(collectivesig, MessageOffset::BODY + sizeof(unsigned char), subset_id, action);
 
         if (result == true)
         {
-            // Update internal state
-            // =====================
+            // Update subset's internal state
+            // ==============================
 
-            m_state = nextstate;
+            subset.m_state = nextstate;
 
             if (action == PROCESS_RESPONSE)
             {
-                m_commitCounter = 0;
-                m_commitPoints.clear();
-                fill(m_commitMap.begin(), m_commitMap.end(), false);
-
-                m_commitFailureCounter = 0;
-                m_commitFailureMap.clear();
-
-                m_commitRedundantCounter = 0;
-                fill(m_commitRedundantMap.begin(), m_commitRedundantMap.end(), false);
-
-                m_responseCounter = 0;
-                m_responseData.clear();
-                fill(m_responseMap.begin(), m_responseMap.end(), false);
+                subset.m_commitPoints.clear();
+                fill(subset.m_commitMap.begin(), subset.m_commitMap.end(), false);
 
                 // First round: consensus over message (e.g., DS block)
                 // Second round: consensus over collective sig
-                m_message.clear();
-                m_collectiveSig.Serialize(m_message, 0);
+                m_subsetCollectiveSigs.at(subset_id).Serialize(subset.m_message, 0);
+
+                // Multicast to all nodes in the subset
+                // ====================================
+
+                vector<Peer> subset_peers;
+                deque<Peer>::const_iterator j = m_peerInfo.begin();
+                for (unsigned int i = 0; i < subset.m_commitMap.size(); i++, j++)
+                {
+                    if (subset.m_commitMap.at(i) == true)
+                    {
+                        subset_peers.push_back(*j);
+                    }
+                }
+
+                P2PComm::GetInstance().SendMessage(subset_peers, collectivesig);
             }
+            else
+            {
+                // Update overall state
+                // ====================
 
-            // Multicast to all nodes in the committee
-            // =======================================
+                m_state = nextstate;
+                m_finalSubsetID = subset_id;
 
-            P2PComm::GetInstance().SendMessage(m_peerInfo, collectivesig);
+                // Multicast to all nodes in the committee
+                // =======================================
 
-
+                P2PComm::GetInstance().SendMessage(m_peerInfo, collectivesig);
+            }
         }
     }
 
@@ -832,15 +803,19 @@ bool ConsensusLeader::ProcessMessageResponse(const vector<unsigned char> & respo
     return ProcessMessageResponseCore(response, offset, PROCESS_RESPONSE, COLLECTIVESIG, COLLECTIVESIG_DONE);
 }
 
-bool ConsensusLeader::GenerateCollectiveSigMessage(vector<unsigned char> & collectivesig, unsigned int offset)
+bool ConsensusLeader::GenerateCollectiveSigMessage(vector<unsigned char> & collectivesig, unsigned int offset, uint8_t subset_id, Action action)
 {
     LOG_MARKER();
 
     // Generate collective signature object
     // ====================================
 
+    ConsensusSubset & subset = m_consensusSubsets.at(subset_id);
+    vector<bool> & subsetResponseMap = m_responseMapSubsets.at(subset_id);
+    Signature & subsetCollectiveSig = m_subsetCollectiveSigs.at(subset_id);
+
     // Aggregate responses
-    Response aggregated_response = AggregateResponses(m_responseData);
+    Response aggregated_response = AggregateResponses(subset.m_responseData);
     if (aggregated_response.Initialized() == false)
     {
         LOG_MESSAGE("Error: AggregateCommits failed");
@@ -849,7 +824,7 @@ bool ConsensusLeader::GenerateCollectiveSigMessage(vector<unsigned char> & colle
     }
 
     // Aggregate keys
-    PubKey aggregated_key = AggregateKeys(m_responseMap);
+    PubKey aggregated_key = AggregateKeys(subsetResponseMap);
     if (aggregated_key.Initialized() == false)
     {
         LOG_MESSAGE("Error: Aggregated key generation failed");
@@ -858,8 +833,8 @@ bool ConsensusLeader::GenerateCollectiveSigMessage(vector<unsigned char> & colle
     }
 
     // Generate the collective signature
-    m_collectiveSig = AggregateSign(m_challenge, aggregated_response);
-    if (m_collectiveSig.Initialized() == false)
+    subsetCollectiveSig = AggregateSign(subset.m_challenge, aggregated_response);
+    if (subsetCollectiveSig.Initialized() == false)
     {
         LOG_MESSAGE("Error: Collective sig generation failed");
         m_state = ERROR;
@@ -867,10 +842,20 @@ bool ConsensusLeader::GenerateCollectiveSigMessage(vector<unsigned char> & colle
     }
 
     // Verify the collective signature
-    if (Schnorr::GetInstance().Verify(m_message, m_collectiveSig, aggregated_key) == false)
+    bool result = false;
+    if (action == PROCESS_RESPONSE)
+    {
+        result = Schnorr::GetInstance().Verify(m_message, subsetCollectiveSig, aggregated_key);
+    }
+    else
+    {
+        result = Schnorr::GetInstance().Verify(subset.m_message, subsetCollectiveSig, aggregated_key);
+    }
+
+    if (result == false)
     {
         LOG_MESSAGE("Error: Collective sig verification failed");
-        m_state = ERROR;
+        subset.m_state = ERROR;
 
         LOG_MESSAGE("num of pub keys: " << m_pubKeys.size())
         LOG_MESSAGE("num of peer_info keys: " << m_peerInfo.size())
@@ -881,8 +866,8 @@ bool ConsensusLeader::GenerateCollectiveSigMessage(vector<unsigned char> & colle
     // Assemble collective signature message body
     // ==========================================
 
-    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [N-byte bitmap] [64-byte collective signature] [64-byte signature]
-    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [N-byte bitmap] [64-byte collective signature]
+    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [1-byte subset id] [N-byte bitmap] [64-byte collective signature] [64-byte signature]
+    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [1-byte subset id] [N-byte bitmap] [64-byte collective signature]
     // Note on N-byte bitmap: N = number of bytes needed to represent all nodes (1 bit = 1 node) + 2 (length indicator)
 
     unsigned int curr_offset = offset;
@@ -899,11 +884,15 @@ bool ConsensusLeader::GenerateCollectiveSigMessage(vector<unsigned char> & colle
     Serializable::SetNumber<uint16_t>(collectivesig, curr_offset, m_myID, sizeof(uint16_t));
     curr_offset += sizeof(uint16_t);
 
+    // 1-byte subset id
+    Serializable::SetNumber<uint8_t>(collectivesig, curr_offset, subset_id, sizeof(uint8_t));
+    curr_offset += sizeof(uint8_t);
+
     // N-byte bitmap
-    curr_offset += SetBitVector(collectivesig, curr_offset, m_responseMap);
+    curr_offset += SetBitVector(collectivesig, curr_offset, subsetResponseMap);
 
     // 64-byte collective signature
-    m_collectiveSig.Serialize(collectivesig, curr_offset);
+    subsetCollectiveSig.Serialize(collectivesig, curr_offset);
     curr_offset += SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
 
     // 64-byte signature
@@ -940,28 +929,16 @@ ConsensusLeader::ConsensusLeader
     const deque<PubKey> & pubkeys,
     const deque<Peer> & peer_info,
     unsigned char class_byte,
-    unsigned char ins_byte,
-    NodeCommitFailureHandlerFunc nodeCommitFailureHandlerFunc,
-    ShardCommitFailureHandlerFunc shardCommitFailureHandlerFunc
-) : ConsensusCommon(consensus_id, block_hash, node_id, privkey, pubkeys, peer_info, 
-                    class_byte, ins_byte), m_commitMap(pubkeys.size(), false),
-                    m_commitPointMap(pubkeys.size(), CommitPoint()), 
-                    m_commitRedundantMap(pubkeys.size(), false), 
-                    m_commitRedundantPointMap(pubkeys.size(), CommitPoint()),
-                    m_responseDataMap(pubkeys.size(), Response())
+    unsigned char ins_byte
+) : ConsensusCommon(consensus_id, block_hash, node_id, privkey, pubkeys, peer_info, class_byte, ins_byte), m_commitPointMap(pubkeys.size(), CommitPoint())
 {
     LOG_MARKER();
 
-    m_state = INITIAL;
-    // m_numForConsensus = (floor(TOLERANCE_FRACTION * (pubkeys.size() - 1)) + 1);
-    m_numForConsensus = ceil(pubkeys.size() * TOLERANCE_FRACTION) - 1;
-    m_numForConsensusFailure = pubkeys.size() - m_numForConsensus;
-    LOG_MESSAGE("TOLERANCE_FRACTION " << TOLERANCE_FRACTION << " pubkeys.size() " << 
-                pubkeys.size() << " m_numForConsensus " << m_numForConsensus <<
-                " m_numForConsensusFailure " << m_numForConsensusFailure);
+    const double TOLERANCE_FRACTION = (double) 0.667;
 
-    m_nodeCommitFailureHandlerFunc = nodeCommitFailureHandlerFunc;
-    m_shardCommitFailureHandlerFunc = shardCommitFailureHandlerFunc;
+    m_state = INITIAL;
+    m_numForConsensus = pubkeys.size() - (ceil(pubkeys.size() * (1 - TOLERANCE_FRACTION)) - 1) - 1;
+    LOG_MESSAGE("TOLERANCE_FRACTION " << TOLERANCE_FRACTION << " pubkeys.size() " << pubkeys.size() << " m_numForConsensus " << m_numForConsensus);
 }
 
 ConsensusLeader::~ConsensusLeader()
@@ -982,7 +959,7 @@ bool ConsensusLeader::StartConsensus(const vector<unsigned char> & message)
         return false;
     }
 
-    if (!CheckState(SEND_ANNOUNCEMENT))
+    if (!CheckStateMain(SEND_ANNOUNCEMENT))
     {
         return false;
     }
@@ -1032,15 +1009,25 @@ bool ConsensusLeader::StartConsensus(const vector<unsigned char> & message)
 
     m_state = ANNOUNCE_DONE;
     m_commitCounter = 0;
-    m_commitRedundantCounter = 0;
-    m_commitFailureCounter = 0;
-    m_responseCounter = 0;
     m_message = message;
 
     // Multicast to all nodes in the committee
     // =======================================
 
     P2PComm::GetInstance().SendMessage(m_peerInfo, announcement);
+
+    // Start timer for accepting commits
+    // =================================
+    m_commitProcessingState = ACCEPTING_COMMITS;
+    unsigned int wait_time = COMMIT_WINDOW_IN_SECONDS;
+    auto func = [this, wait_time]() -> void
+    {
+        this_thread::sleep_for(chrono::seconds(wait_time));
+        lock_guard<mutex> g(m_commitProcessingStateMutex);
+        m_commitProcessingState = COMMIT_TIMER_EXPIRED;
+    };
+    DetachedFunction(1, func);
+
     return true;
 }
 
@@ -1058,9 +1045,6 @@ bool ConsensusLeader::ProcessMessage(const vector<unsigned char> & message, unsi
         case ConsensusMessageType::COMMIT:
             result = ProcessMessageCommit(message, offset + 1);
             break;
-        case ConsensusMessageType::COMMITFAILURE:
-            result = ProcessMessageCommitFailure(message, offset + 1, from);
-            break;
         case ConsensusMessageType::RESPONSE:
             result = ProcessMessageResponse(message, offset + 1);
             break;
@@ -1071,8 +1055,8 @@ bool ConsensusLeader::ProcessMessage(const vector<unsigned char> & message, unsi
             result = ProcessMessageFinalResponse(message, offset + 1);
             break;
         default:
-            LOG_MESSAGE("Error: Unknown consensus message received. No: "  << 
-                        (unsigned int) message.at(offset));
+        LOG_MESSAGE("Error: Unknown consensus message received. No: "  << (unsigned int) message.at(offset));
+            break;
     }
 
     return result;

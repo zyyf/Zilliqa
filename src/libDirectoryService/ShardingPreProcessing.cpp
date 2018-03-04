@@ -158,9 +158,7 @@ bool DirectoryService::RunConsensusOnShardingWhenDSPrimary()
             m_mediator.m_DSCommitteePubKeys,
             m_mediator.m_DSCommitteeNetworkInfo,
             static_cast<unsigned char>(DIRECTORY),
-            static_cast<unsigned char>(SHARDINGCONSENSUS),
-            std::function<bool(const vector<unsigned char> &, unsigned int, const Peer &)>(),
-            std::function<bool(map<unsigned int, std::vector<unsigned char>>)>()
+            static_cast<unsigned char>(SHARDINGCONSENSUS)
         )
     );
 

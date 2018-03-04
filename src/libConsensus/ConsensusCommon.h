@@ -61,6 +61,10 @@ public:
 
 protected:
 
+    // Consensus subset count
+    // Each subset will attempt to reach consensus with m_numForConsensus number of peers who initially committed
+    static const unsigned int NUM_CONSENSUS_SETS = 50;
+
     enum ConsensusMessageType : unsigned char
     {
         ANNOUNCE = 0x00,
@@ -71,16 +75,11 @@ protected:
         FINALCOMMIT = 0x05,
         FINALCHALLENGE = 0x06,
         FINALRESPONSE = 0x07,
-        FINALCOLLECTIVESIG = 0x08,
-        COMMITFAILURE = 0x09,
-        CONSENSUSFAILURE = 0x10,
+        FINALCOLLECTIVESIG = 0x08
     };
 
-    /// State of the active consensus session.
+    // Overall consensus state
     State m_state;
-
-    /// The minimum fraction of peers necessary to achieve consensus.
-    const double TOLERANCE_FRACTION;
 
     /// The unique ID assigned to the active consensus session. 
     uint32_t m_consensusID;
@@ -109,11 +108,16 @@ protected:
     /// The instruction byte value for the next consensus message to be composed.
     unsigned char m_insByte;
 
-    /// Generated collective signature
+    uint8_t m_finalSubsetID;
+
+    // Generated collective signature (overall)
     Signature m_collectiveSig;
 
-    /// Response map for the generated collective signature
-    std::vector<bool> m_responseMap;
+    // Generated collective signature (one per subset)
+    std::vector<Signature> m_subsetCollectiveSigs;
+
+    // Response map for the generated collective signature (one per subset)
+    std::vector<std::vector<bool>> m_responseMapSubsets;
 
     /// Constructor.
     ConsensusCommon

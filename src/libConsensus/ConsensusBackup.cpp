@@ -24,6 +24,9 @@
 
 using namespace std;
 
+// For this version I've maintained just one overall state
+// For stricter checking we can think about having one state per subset
+
 bool ConsensusBackup::CheckState(Action action)
 {
     bool result = true;
@@ -70,19 +73,9 @@ bool ConsensusBackup::CheckState(Action action)
                     result = false;
                     break;
                 case COMMIT_DONE:
-                    break;
                 case RESPONSE_DONE:
-                    LOG_MESSAGE("Processing challenge but response already done");
-                    // LOG_MESSAGE("Error: Processing challenge but response already done");
-                    // result = false;
-                    break;
                 case FINALCOMMIT_DONE:
-                    LOG_MESSAGE("Error: Processing challenge but finalcommit already done");
-                    result = false;
-                    break;
                 case FINALRESPONSE_DONE:
-                    LOG_MESSAGE("Error: Processing challenge but finalresponse already done");
-                    result = false;
                     break;
                 case DONE:
                     LOG_MESSAGE("Error: Processing challenge but consensus already done");
@@ -103,16 +96,9 @@ bool ConsensusBackup::CheckState(Action action)
                     result = false;
                     break;
                 case COMMIT_DONE:
-                    break;
                 case RESPONSE_DONE:
-                    break;
                 case FINALCOMMIT_DONE:
-                    LOG_MESSAGE("Error: Processing collectivesig but finalcommit already done");
-                    result = false;
-                    break;
                 case FINALRESPONSE_DONE:
-                    LOG_MESSAGE("Error: Processing collectivesig but finalresponse already done");
-                    result = false;
                     break;
                 case DONE:
                     LOG_MESSAGE("Error: Processing collectivesig but consensus already done");
@@ -133,19 +119,9 @@ bool ConsensusBackup::CheckState(Action action)
                     result = false;
                     break;
                 case COMMIT_DONE:
-                    LOG_MESSAGE("Error: Processing finalchallenge but response not yet done");
-                    result = false;
-                    break;
                 case RESPONSE_DONE:
-                    LOG_MESSAGE("Processing finalchallenge but finalcommit not yet done");
-                    // LOG_MESSAGE("Error: Processing finalchallenge but finalcommit not yet done");
-                    // result = false;
-                    break;
                 case FINALCOMMIT_DONE:
-                    break;
                 case FINALRESPONSE_DONE:
-                    LOG_MESSAGE("Error: Processing finalchallenge but finalresponse already done");
-                    result = false;
                     break;
                 case DONE:
                     LOG_MESSAGE("Error: Processing finalchallenge but consensus already done");
@@ -166,21 +142,8 @@ bool ConsensusBackup::CheckState(Action action)
                     result = false;
                     break;
                 case COMMIT_DONE:
-                    LOG_MESSAGE("Error: Processing finalcollectivesig but response not yet done");
-                    // TODO: check this logic again. 
-                    // Issue #43
-                    // Node cannot proceed if finalcollectivesig arrive earler (and get ignore by the node)
-                    //result = false; 
-                    break;
                 case RESPONSE_DONE:
-                    LOG_MESSAGE("Error: Processing finalcollectivesig but finalcommit not yet done");
-                    // TODO: check this logic again. 
-                    // Issue #43
-                    // Node cannot proceed if finalcollectivesig arrive earler (and get ignore by the node)
-                    //result = false;
-                    break;
                 case FINALCOMMIT_DONE:
-                    break;
                 case FINALRESPONSE_DONE:
                     break;
                 case DONE:
@@ -275,7 +238,7 @@ bool ConsensusBackup::ProcessMessageAnnounce(const vector<unsigned char> & annou
     if (msg_valid == false)
     {
         LOG_MESSAGE("Error: Message validation failed");
-
+#if 0
         if (!errorMsg.empty())
         {
             vector<unsigned char> commitFailureMsg = { m_classByte, m_insByte, static_cast<unsigned
@@ -297,7 +260,7 @@ bool ConsensusBackup::ProcessMessageAnnounce(const vector<unsigned char> & annou
                 return true;
             }
         }
-
+#endif
         m_state = ERROR;
         return false;
     }
@@ -335,42 +298,6 @@ bool ConsensusBackup::ProcessMessageAnnounce(const vector<unsigned char> & annou
     }
 
     return result;
-}
-
-bool ConsensusBackup::ProcessMessageConsensusFailure(const vector<unsigned char> & announcement,
-                                                     unsigned int offset)
-{
-    LOG_MARKER();
-
-    m_state = INITIAL;
-
-    return true;
-}
-
-bool ConsensusBackup::GenerateCommitFailureMessage(vector<unsigned char> & commitFailure,
-                                                   unsigned int offset,
-                                                   const vector<unsigned char> & errorMsg)
-{
-    LOG_MARKER();
-
-    unsigned int curr_offset = offset;
-
-    // 4-byte consensus id
-    Serializable::SetNumber<uint32_t>(commitFailure, curr_offset, m_consensusID, sizeof(uint32_t));
-    curr_offset += sizeof(uint32_t);
-
-    // 32-byte blockhash
-    commitFailure.insert(commitFailure.begin() + curr_offset, m_blockHash.begin(), m_blockHash.end());
-    curr_offset += m_blockHash.size();
-
-    // 2-byte backup id
-    Serializable::SetNumber<uint16_t>(commitFailure, curr_offset, m_myID, sizeof(uint16_t));
-    curr_offset += sizeof(uint16_t);
-
-    commitFailure.resize(curr_offset + errorMsg.size());
-    copy(errorMsg.begin(), errorMsg.end(), commitFailure.begin() + curr_offset);
-
-    return true;    
 }
 
 bool ConsensusBackup::GenerateCommitMessage(vector<unsigned char> & commit, unsigned int offset)
@@ -435,10 +362,10 @@ bool ConsensusBackup::ProcessMessageChallengeCore(const vector<unsigned char> & 
     // Extract and check challenge message body
     // ========================================
 
-    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [33-byte aggregated commit] [33-byte aggregated key] [32-byte challenge] [64-byte signature]
+    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [1-byte subset id] [33-byte aggregated commit] [33-byte aggregated key] [32-byte challenge] [64-byte signature]
 
     const unsigned int length_available = challenge.size() - offset;
-    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + COMMIT_POINT_SIZE + PUB_KEY_SIZE + CHALLENGE_SIZE + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
+    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + sizeof(uint8_t) + COMMIT_POINT_SIZE + PUB_KEY_SIZE + CHALLENGE_SIZE + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
 
     if (length_needed > length_available)
     {
@@ -480,6 +407,17 @@ bool ConsensusBackup::ProcessMessageChallengeCore(const vector<unsigned char> & 
         return false;
     }
 
+    // 1-byte subset id
+    uint8_t subset_id = Serializable::GetNumber<uint8_t>(challenge, curr_offset, sizeof(uint8_t));
+    curr_offset += sizeof(uint8_t);
+
+    // Check the subset id
+    if (subset_id >= NUM_CONSENSUS_SETS)
+    {
+        LOG_MESSAGE("Error: Subset ID >= NUM_CONSENSUS_SETS");
+        return false;
+    }
+
     // 33-byte aggregated commit
     CommitPoint aggregated_commit(challenge, curr_offset);
     curr_offset += COMMIT_POINT_SIZE;
@@ -505,19 +443,29 @@ bool ConsensusBackup::ProcessMessageChallengeCore(const vector<unsigned char> & 
     }
 
     // 32-byte challenge
-    m_challenge.Deserialize(challenge, curr_offset);
+    m_challengeSubsets.at(subset_id).Deserialize(challenge, curr_offset);
     curr_offset += CHALLENGE_SIZE;
 
     // Check the challenge
-    if (m_challenge.Initialized() == false)
+    if (m_challengeSubsets.at(subset_id).Initialized() == false)
     {
         LOG_MESSAGE("Error: Invalid challenge received");
         m_state = ERROR;
         return false;
     }
-    Challenge challenge_verif = GetChallenge(m_message, 0, m_message.size(), aggregated_commit, aggregated_key);
 
-    if (!(challenge_verif == m_challenge))
+    Challenge challenge_verif;
+
+    if (action == PROCESS_CHALLENGE)
+    {
+        challenge_verif = GetChallenge(m_message, 0, m_message.size(), aggregated_commit, aggregated_key);
+    }
+    else
+    {
+        challenge_verif = GetChallenge(m_messageSubsets.at(subset_id), 0, m_messageSubsets.at(subset_id).size(), aggregated_commit, aggregated_key);
+    }
+
+    if (!(challenge_verif == m_challengeSubsets.at(subset_id)))
     {
         LOG_MESSAGE("Error: Generated challenge mismatch");
         m_state = ERROR;
@@ -540,7 +488,7 @@ bool ConsensusBackup::ProcessMessageChallengeCore(const vector<unsigned char> & 
     // =================
 
     vector<unsigned char> response = { m_classByte, m_insByte, static_cast<unsigned char>(returnmsgtype) };
-    bool result = GenerateResponseMessage(response, MessageOffset::BODY + sizeof(unsigned char));
+    bool result = GenerateResponseMessage(response, MessageOffset::BODY + sizeof(unsigned char), subset_id);
     if (result == true)
     {
 
@@ -565,15 +513,15 @@ bool ConsensusBackup::ProcessMessageChallenge(const vector<unsigned char> & chal
     return ProcessMessageChallengeCore(challenge, offset, PROCESS_CHALLENGE, RESPONSE, RESPONSE_DONE);
 }
 
-bool ConsensusBackup::GenerateResponseMessage(vector<unsigned char> & response, unsigned int offset)
+bool ConsensusBackup::GenerateResponseMessage(vector<unsigned char> & response, unsigned int offset, uint8_t subset_id)
 {
     LOG_MARKER();
 
     // Assemble response message body
     // ==============================
     
-    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [32-byte response] [64-byte signature]
-    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [32-byte response]
+    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [1-byte subset id] [32-byte response] [64-byte signature]
+    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte backup id] [1-byte subset id] [32-byte response]
 
     unsigned int curr_offset = offset;
 
@@ -589,8 +537,12 @@ bool ConsensusBackup::GenerateResponseMessage(vector<unsigned char> & response, 
     Serializable::SetNumber<uint16_t>(response, curr_offset, m_myID, sizeof(uint16_t));
     curr_offset += sizeof(uint16_t);
 
+    // 1-byte subset id
+    Serializable::SetNumber<uint8_t>(response, curr_offset, subset_id, sizeof(uint8_t));
+    curr_offset += sizeof(uint8_t);
+
     // 32-byte response
-    Response r(*m_commitSecret, m_challenge, m_myPrivKey);
+    Response r(*m_commitSecret, m_challengeSubsets.at(subset_id), m_myPrivKey);
     r.Serialize(response, curr_offset);
     curr_offset += RESPONSE_SIZE;
 
@@ -607,9 +559,7 @@ bool ConsensusBackup::GenerateResponseMessage(vector<unsigned char> & response, 
     return true;
 }
 
-bool ConsensusBackup::ProcessMessageCollectiveSigCore(const vector<unsigned char> & collectivesig, 
-                                                      unsigned int offset, Action action, 
-                                                      State nextstate)
+bool ConsensusBackup::ProcessMessageCollectiveSigCore(const vector<unsigned char> & collectivesig, unsigned int offset, Action action, State nextstate)
 {
     LOG_MARKER();
 
@@ -624,12 +574,12 @@ bool ConsensusBackup::ProcessMessageCollectiveSigCore(const vector<unsigned char
     // Extract and check collective signature message body
     // ===================================================
 
-    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [N-byte bitmap] [64-byte collective signature] [64-byte signature]
-    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [N-byte bitmap] [64-byte collective signature]
+    // Format: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [1-byte subset id] [N-byte bitmap] [64-byte collective signature] [64-byte signature]
+    // Signature is over: [4-byte consensus id] [32-byte blockhash] [2-byte leader id] [1-byte subset id] [N-byte bitmap] [64-byte collective signature]
     // Note on N-byte bitmap: N = number of bytes needed to represent all nodes (1 bit = 1 node) + 2 (length indicator)
 
     const unsigned int length_available = collectivesig.size() - offset;
-    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE + GetBitVectorLengthInBytes(m_pubKeys.size()) + 2 + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
+    const unsigned int length_needed = sizeof(uint32_t) + BLOCK_HASH_SIZE + sizeof(uint16_t) + sizeof(uint8_t) + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE + GetBitVectorLengthInBytes(m_pubKeys.size()) + 2 + SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
 
     if (length_needed > length_available)
     {
@@ -671,23 +621,34 @@ bool ConsensusBackup::ProcessMessageCollectiveSigCore(const vector<unsigned char
         return false;
     }
 
+    // 1-byte subset id
+    uint8_t subset_id = Serializable::GetNumber<uint8_t>(collectivesig, curr_offset, sizeof(uint8_t));
+    curr_offset += sizeof(uint8_t);
+
+    // Check the subset id
+    if (subset_id >= NUM_CONSENSUS_SETS)
+    {
+        LOG_MESSAGE("Error: Subset ID >= NUM_CONSENSUS_SETS");
+        return false;
+    }
+
     // N-byte bitmap
-    m_responseMap = GetBitVector(collectivesig, curr_offset, GetBitVectorLengthInBytes(m_pubKeys.size()));
+    m_responseMapSubsets.at(subset_id) = GetBitVector(collectivesig, curr_offset, GetBitVectorLengthInBytes(m_pubKeys.size()));
     curr_offset += GetBitVectorLengthInBytes(m_pubKeys.size()) + 2;
 
     // Check the bitmap
-    if (m_responseMap.empty())
+    if (m_responseMapSubsets.at(subset_id).empty())
     {
         LOG_MESSAGE("Error: Response map deserialization failed");
         return false;
     }
 
     // 64-byte collective signature
-    m_collectiveSig.Deserialize(collectivesig, curr_offset);
+    m_subsetCollectiveSigs.at(subset_id).Deserialize(collectivesig, curr_offset);
     curr_offset += SIGNATURE_CHALLENGE_SIZE + SIGNATURE_RESPONSE_SIZE;
 
     // Aggregate keys
-    PubKey aggregated_key = AggregateKeys(m_responseMap);
+    PubKey aggregated_key = AggregateKeys(m_responseMapSubsets.at(subset_id));
     if (aggregated_key.Initialized() == false)
     {
         LOG_MESSAGE("Error: Aggregated key generation failed");
@@ -695,7 +656,7 @@ bool ConsensusBackup::ProcessMessageCollectiveSigCore(const vector<unsigned char
         return false;
     }
 
-    if (Schnorr::GetInstance().Verify(m_message, m_collectiveSig, aggregated_key) == false)
+    if (Schnorr::GetInstance().Verify(m_message, m_subsetCollectiveSigs.at(subset_id), aggregated_key) == false)
     {
         LOG_MESSAGE("Error: Collective signature verification failed");
         m_state = ERROR;
@@ -732,8 +693,7 @@ bool ConsensusBackup::ProcessMessageCollectiveSigCore(const vector<unsigned char
 
             // First round: consensus over message (e.g., DS block)
             // Second round: consensus over collective sig
-            m_message.clear();
-            m_collectiveSig.Serialize(m_message, 0);
+            m_subsetCollectiveSigs.at(subset_id).Serialize(m_messageSubsets.at(subset_id), 0);
 
             // Unicast to the leader
             // =====================
@@ -748,6 +708,7 @@ bool ConsensusBackup::ProcessMessageCollectiveSigCore(const vector<unsigned char
         // =====================
 
         m_state = nextstate;
+        m_finalSubsetID = subset_id;
     }
 
     return result;
@@ -783,8 +744,7 @@ ConsensusBackup::ConsensusBackup
     unsigned char class_byte,
     unsigned char ins_byte,
     MsgContentValidatorFunc msg_validator
-) : ConsensusCommon(consensus_id, block_hash, node_id, privkey, pubkeys, peer_info, class_byte, 
-                    ins_byte), m_commitSecret(nullptr), m_commitPoint(nullptr)
+) : ConsensusCommon(consensus_id, block_hash, node_id, privkey, pubkeys, peer_info, class_byte, ins_byte), m_commitSecret(nullptr), m_commitPoint(nullptr), m_messageSubsets(NUM_CONSENSUS_SETS)
 {
     LOG_MARKER();
 
@@ -812,9 +772,6 @@ bool ConsensusBackup::ProcessMessage(const vector<unsigned char> & message, unsi
         case ConsensusMessageType::ANNOUNCE:
             result = ProcessMessageAnnounce(message, offset + 1);
             break;
-        case ConsensusMessageType::CONSENSUSFAILURE:
-            result = ProcessMessageConsensusFailure(message, offset + 1);
-            break;
         case ConsensusMessageType::CHALLENGE:
             result = ProcessMessageChallenge(message, offset + 1);
             break;
@@ -828,7 +785,8 @@ bool ConsensusBackup::ProcessMessage(const vector<unsigned char> & message, unsi
             result = ProcessMessageFinalCollectiveSig(message, offset + 1);
             break;
         default:
-            LOG_MESSAGE("Error: Unknown consensus message received");
+        LOG_MESSAGE("Error: Unknown consensus message received");
+            break;
     }
 
     return result;
