@@ -647,8 +647,8 @@ bool Node::ProcessCreateTransaction(const vector<unsigned char>& message,
 
     // Generate to account
     Address toAddr;
-    sha2.Reset();
-    sha2.Update(msgTo, 0, PUB_KEY_SIZE);
+    // sha2.Reset();
+    // sha2.Update(msgTo, 0, PUB_KEY_SIZE);
     // const vector<unsigned char> & tmp2 = sha2.Finalize();
     // copy(tmp2.end() - ACC_ADDR_SIZE, tmp2.end(), toAddr.asArray().begin());
 
@@ -665,17 +665,17 @@ bool Node::ProcessCreateTransaction(const vector<unsigned char>& message,
     uint32_t version = (uint32_t)m_consensusMyID;
     uint256_t nonce = 0;
 
-    // Signature tmpSig;
+    Signature tmpSig;
 
-    // Schnorr::GetInstance().Sign(message, m_mediator.m_selfKey.first,
-    //                             m_mediator.m_selfKey.second, tmpSig);
+    Schnorr::GetInstance().Sign(message, m_mediator.m_selfKey.first,
+                                m_mediator.m_selfKey.second, tmpSig);
 
-    // vector<unsigned char> tmpSignature;
-    // tmpSig.Serialize(tmpSignature, 0);
-    
+    vector<unsigned char> tmpSignature;
+
+    tmpSig.Serialize(tmpSignature, 0);
     array<unsigned char, TRAN_SIG_SIZE> signature;
-    // copy(tmpSignature.begin(), tmpSignature.end(), signature.begin());
-    fill(signature.begin(), signature.end(), 0x0F);
+    copy(tmpSignature.begin(), tmpSignature.end(), signature.begin());
+    // fill(signature.begin(), signature.end(), 0x0F);
 
     lock_guard<mutex> g(m_mutexCreatedTransactions);
 
