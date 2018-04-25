@@ -49,7 +49,7 @@ void process_addpeers(int numargs, const char* progname, const char* cmdname,
     else
     {
         struct in_addr ip_addr;
-        inet_aton("127.0.0.1", &ip_addr);
+        inet_aton("52.11.114.210", &ip_addr);
         Peer my_port(uint128_t(ip_addr.s_addr), listen_port);
 
         for (int i = 0; i < numargs;)
@@ -105,7 +105,7 @@ void process_broadcast(int numargs, const char* progname, const char* cmdname,
     else
     {
         struct in_addr ip_addr;
-        inet_aton("127.0.0.1", &ip_addr);
+        inet_aton("52.11.114.210", &ip_addr);
         Peer my_port((uint128_t)ip_addr.s_addr, listen_port);
 
         unsigned int numbytes = static_cast<unsigned int>(atoi(args[0]));
@@ -134,7 +134,7 @@ void process_cmd(int numargs, const char* progname, const char* cmdname,
     else
     {
         struct in_addr ip_addr;
-        inet_aton("127.0.0.1", &ip_addr);
+        inet_aton("52.11.114.210", &ip_addr);
         Peer my_port((uint128_t)ip_addr.s_addr, listen_port);
 
         // Send the generic message to the local node
