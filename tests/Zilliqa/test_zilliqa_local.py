@@ -238,7 +238,7 @@ def run_startpow1(nodenum, dscount, blocknum, diff, rand1, rand2):
 	startpow1_cmd = 'tests/Zilliqa/sendcmd ' + str(NODE_LISTEN_PORT + nodenum - 1) + ' cmd 0200' + blocknum + diff + rand1 + rand2
 	for x in range(0, dscount):
 		keypair = keypairs[x].split(" ")
-		startpow1_cmd = startpow1_cmd + keypair[0] + '0000000000000000000000000100007F' + "{0:0{1}x}".format(NODE_LISTEN_PORT + x, 8)
+		startpow1_cmd = startpow1_cmd + keypair[0] + '000000000000000000000000D2720B34' + "{0:0{1}x}".format(NODE_LISTEN_PORT + x, 8)
 
 	# Send to node
 	os.system(startpow1_cmd)

@@ -33,7 +33,7 @@ echo "starting on local host from block 0 with difficulty 3..."
 #set primary 
 for ds in {1..10}
 do
-    python tests/Zilliqa/test_zilliqa_local.py sendcmd $ds 01000000000000000000000000000100007F00001389
+    python tests/Zilliqa/test_zilliqa_local.py sendcmd $ds 0100000000000000000000000000D2720B3400001389
 done
 sleep 10
 
