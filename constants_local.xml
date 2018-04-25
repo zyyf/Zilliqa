@@ -29,23 +29,23 @@
     </accounts>
     <lookups>
         <peer>
-            <ip>127.0.0.1</ip>
+            <ip>52.11.114.210</ip>
             <port>4001</port>
         </peer>
         <peer>
-            <ip>127.0.0.1</ip>
+            <ip>52.11.114.210</ip>
             <port>4002</port>
         </peer>
         <peer>
-            <ip>127.0.0.1</ip>
+            <ip>52.11.114.210</ip>
             <port>4003</port>
         </peer>
         <peer>
-            <ip>127.0.0.1</ip>
+            <ip>52.11.114.210</ip>
             <port>4004</port>
         </peer>
         <peer>
-            <ip>127.0.0.1</ip>
+            <ip>52.11.114.210</ip>
             <port>4005</port>
         </peer>
     </lookups>

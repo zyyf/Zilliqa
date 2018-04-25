@@ -144,7 +144,7 @@ def run_start(numdsnodes):
 		if (x < numdsnodes):
 			peer = ET.SubElement(nodes, "peer")
 			ET.SubElement(peer, "pubk").text = keypair[0]
-			ET.SubElement(peer, "ip").text = '127.0.0.1'
+			ET.SubElement(peer, "ip").text = '52.11.114.210'
 			ET.SubElement(peer, "port").text = str(NODE_LISTEN_PORT + x)
 	keys_file.close()
 
@@ -158,10 +158,10 @@ def run_start(numdsnodes):
 		if (x < numdsnodes):
 			shutil.copyfile('config.xml', LOCAL_RUN_FOLDER + testfolders_list[x] + '/config.xml')
 			shutil.copyfile('constants_local.xml', LOCAL_RUN_FOLDER + testfolders_list[x] + '/constants.xml')
-			os.system('cd ' + LOCAL_RUN_FOLDER + testfolders_list[x] + '; echo \"' + keypair[0] + ' ' + keypair[1] + '\" > mykey.txt' + '; ulimit -n 65535; ulimit -Sc unlimited; ulimit -Hc unlimited; ./zilliqa ' + keypair[1] + ' ' + keypair[0] + ' ' + '127.0.0.1' +' ' + str(NODE_LISTEN_PORT + x) + ' 1 0 0 > ./error_log_zilliqa 2>&1 &')
+			os.system('cd ' + LOCAL_RUN_FOLDER + testfolders_list[x] + '; echo \"' + keypair[0] + ' ' + keypair[1] + '\" > mykey.txt' + '; ulimit -n 65535; ulimit -Sc unlimited; ulimit -Hc unlimited; ./zilliqa ' + keypair[1] + ' ' + keypair[0] + ' ' + '52.11.114.210' +' ' + str(NODE_LISTEN_PORT + x) + ' 1 0 0 > ./error_log_zilliqa 2>&1 &')
 		else:
 			shutil.copyfile('constants_local.xml', LOCAL_RUN_FOLDER + testfolders_list[x] + '/constants.xml')
-			os.system('cd ' + LOCAL_RUN_FOLDER + testfolders_list[x] + '; echo \"' + keypair[0] + ' ' + keypair[1] + '\" > mykey.txt' + '; ulimit -n 65535; ulimit -Sc unlimited; ulimit -Hc unlimited; ./zilliqa ' + keypair[1] + ' ' + keypair[0] + ' ' + '127.0.0.1' +' ' + str(NODE_LISTEN_PORT + x) + ' 0 0 0 > ./error_log_zilliqa 2>&1 &')
+			os.system('cd ' + LOCAL_RUN_FOLDER + testfolders_list[x] + '; echo \"' + keypair[0] + ' ' + keypair[1] + '\" > mykey.txt' + '; ulimit -n 65535; ulimit -Sc unlimited; ulimit -Hc unlimited; ./zilliqa ' + keypair[1] + ' ' + keypair[0] + ' ' + '52.11.114.210' +' ' + str(NODE_LISTEN_PORT + x) + ' 0 0 0 > ./error_log_zilliqa 2>&1 &')
 
 def run_connect(numnodes):
 	testfolders_list = get_immediate_subdirectories(LOCAL_RUN_FOLDER)
@@ -192,7 +192,7 @@ def run_connect(numnodes):
 				has_peers_to_connect = True
 				keypair = keypairs[index].split(" ")
 				print ('connecting node ' + str(x + 1) + ' (port ' + str(NODE_LISTEN_PORT + x) + ') to node ' + str(index + 1) + ' (' + str(NODE_LISTEN_PORT + index) + ')')
-				connect_cmd = connect_cmd + ' ' + keypair[0] + ' 127.0.0.1 ' + str(NODE_LISTEN_PORT + index)
+				connect_cmd = connect_cmd + ' ' + keypair[0] + ' 52.11.114.210 ' + str(NODE_LISTEN_PORT + index)
 				if (x < index):
 					edges.add((x + 1, index + 1))
 				else:
