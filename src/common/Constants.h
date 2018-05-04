@@ -120,4 +120,5 @@ extern const unsigned int NEW_NODE_POW_DELAY;
 extern const unsigned int N_PREFILLED_PER_ACCOUNT;
 extern const std::vector<std::string> GENESIS_WALLETS;
 extern const std::vector<std::string> GENESIS_KEYS;
+extern const unsigned int MIN_DIFF;
 #endif // __CONSTANTS_H__

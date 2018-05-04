@@ -102,3 +102,4 @@ const std::vector<std::string> GENESIS_WALLETS{
     ReadAccountsFromConstantsFile("wallet_address")};
 const std::vector<std::string> GENESIS_KEYS{
     ReadAccountsFromConstantsFile("private_key")};
+const unsigned int MIN_DIFF{ReadFromConstantsFile("MIN_DIFF")};

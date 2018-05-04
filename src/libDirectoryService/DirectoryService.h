@@ -277,6 +277,7 @@ class DirectoryService : public Executable, public Broadcastable
         std::vector<bool>& isMicroBlockEmpty, uint32_t& numMicroBlocks) const;
     bool VerifyMicroBlockCoSignature(const MicroBlock& microBlock,
                                      uint32_t shardId);
+    unsigned int CalculateNewDifficulty(const unsigned int& prevDifficulty);
 
     // FinalBlockValidator functions
     bool CheckFinalBlockValidity();

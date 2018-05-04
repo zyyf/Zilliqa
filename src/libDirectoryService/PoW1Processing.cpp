@@ -37,6 +37,8 @@
 using namespace std;
 using namespace boost::multiprecision;
 
+const unsigned int requiredNodes = 100;
+
 #ifndef IS_LOOKUP_NODE
 bool DirectoryService::CheckWhetherMaxSubmissionsReceived(Peer peer, PubKey key)
 {
@@ -110,6 +112,26 @@ bool DirectoryService::VerifyPoW1Submission(
 #endif // STAT_TEST
 
     return result;
+}
+
+const unsigned int diffFactor = 32;
+unsigned int
+DirectoryService::CalculateNewDifficulty(const unsigned int& prevDifficulty)
+{
+    unsigned int prevSubmissions;
+    {
+        lock_guard<mutex> g(m_mutexAllPOW1);
+        prevSubmissions = m_allPoW1s.size();
+    }
+
+    int submissionsDiff = requiredNodes - prevSubmissions;
+    int adjFactor = 1 - submissionsDiff / 9;
+
+    unsigned int newDifficulty = max(
+        adjFactor * (int)prevDifficulty / (int)diffFactor + (int)prevDifficulty,
+        (int)MIN_DIFF);
+
+    return newDifficulty;
 }
 
 bool DirectoryService::ParseMessageAndVerifyPOW1(
