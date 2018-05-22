@@ -50,13 +50,13 @@ class Account : public Serializable
     Json::Value m_initValJson;
     vector<unsigned char> m_codeCache;
 
-    bool isContract() const { return m_codeHash != h256(); }
-
     AccountTrieDB<h256, OverlayDB> m_storage;
 
 public:
     Account();
 
+    //tells if the account is a contract accoun
+    bool isContract() const { return m_codeHash != h256(); }
     /// Constructor for loading account information from a byte stream.
     Account(const vector<unsigned char>& src, unsigned int offset);
 
