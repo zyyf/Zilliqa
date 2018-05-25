@@ -368,7 +368,7 @@ string Server::GetStorageAt(const string& address, const string& position)
 Json::Value Server::GetSmartContracts(const string& address)
 {
     Json::Value _json;
-
+    LOG_MARKER();
     try
     {
         Json::Value _json;
@@ -394,12 +394,18 @@ Json::Value Server::GetSmartContracts(const string& address)
         }
         boost::multiprecision::uint256_t nonce = account->GetNonce();
         //[TODO] find out a more efficient way (using storage)
+
+        if (nonce == 0)
+        {
+            return _json;
+        }
         do
         {
             Address contractAddr = Account::GetAddressForContract(addr, nonce);
             nonce--;
             const Account* contractAccount
                 = AccountStore::GetInstance().GetAccount(contractAddr);
+            LOG_GENERAL(INFO, "nonce: " << nonce << " " << contractAddr.hex());
             if (contractAccount != nullptr)
             {
                 if (!contractAccount->isContract())
