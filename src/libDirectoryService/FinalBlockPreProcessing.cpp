@@ -41,7 +41,8 @@ using namespace boost::multiprecision;
 #ifndef IS_LOOKUP_NODE
 void DirectoryService::ExtractDataFromMicroblocks(
     TxnHash& microblockTxnTrieRoot, StateHash& microblockDeltaTrieRoot,
-    std::vector<MicroBlockHashSet>& microblockHashes, uint256_t& allGasLimit,
+    std::vector<MicroBlockHashSet>& microblockHashes,
+    std::vector<uint32_t>& shardIDs, uint256_t& allGasLimit,
     uint256_t& allGasUsed, uint32_t& numTxs,
     std::vector<bool>& isMicroBlockEmpty, uint32_t& numMicroBlocks) const
 {
@@ -72,6 +73,7 @@ void DirectoryService::ExtractDataFromMicroblocks(
         microblockHashes.push_back(
             {microBlock.GetHeader().GetTxRootHash(),
              microBlock.GetHeader().GetStateDeltaHash()});
+        shardIDs.emplace_back(microBlock.GetHeader().GetShardID());
         allGasLimit += microBlock.GetHeader().GetGasLimit();
         allGasUsed += microBlock.GetHeader().GetGasUsed();
         numTxs += microBlock.GetHeader().GetNumTxs();
@@ -86,8 +88,9 @@ void DirectoryService::ExtractDataFromMicroblocks(
         if (!isVacuousEpoch && !isEmpty)
         {
             m_mediator.m_node->m_unavailableMicroBlocks[blockNum].insert(
-                {{microBlock.GetHeader().GetTxRootHash(),
-                  microBlock.GetHeader().GetStateDeltaHash()},
+                {{{microBlock.GetHeader().GetTxRootHash(),
+                   microBlock.GetHeader().GetStateDeltaHash()},
+                  microBlock.GetHeader().GetShardID()},
                  // {!isEmptyTxn, true}});
                  {false, true}});
 
@@ -129,6 +132,7 @@ void DirectoryService::ComposeFinalBlockCore()
     TxnHash microblockTxnTrieRoot;
     StateHash microblockDeltaTrieRoot;
     std::vector<MicroBlockHashSet> microBlockHashes;
+    std::vector<uint32_t> shardIDs;
     uint8_t type = TXBLOCKTYPE::FINAL;
     uint32_t version = BLOCKVERSION::VERSION1;
     uint256_t allGasLimit = 0;
@@ -138,8 +142,9 @@ void DirectoryService::ComposeFinalBlockCore()
     uint32_t numMicroBlocks = 0;
 
     ExtractDataFromMicroblocks(microblockTxnTrieRoot, microblockDeltaTrieRoot,
-                               microBlockHashes, allGasLimit, allGasUsed,
-                               numTxs, isMicroBlockEmpty, numMicroBlocks);
+                               microBlockHashes, shardIDs, allGasLimit,
+                               allGasUsed, numTxs, isMicroBlockEmpty,
+                               numMicroBlocks);
 
     m_microBlocks.clear();
 
@@ -200,8 +205,8 @@ void DirectoryService::ComposeFinalBlockCore()
                       m_mediator.m_selfKey.second, lastDSBlockNum,
                       dsBlockHeader),
         vector<bool>(isMicroBlockEmpty),
-        vector<MicroBlockHashSet>(microBlockHashes),
-        CoSignatures(m_mediator.m_DSCommitteePubKeys.size())));
+        vector<MicroBlockHashSet>(microBlockHashes), vector<uint32_t>(shardIDs),
+        CoSignatures(m_mediator.m_DSCommittee.size())));
 
     LOG_STATE("[STATS][" << std::setw(15) << std::left
                          << m_mediator.m_selfPeer.GetPrintableIPAddress()
@@ -212,192 +217,6 @@ void DirectoryService::ComposeFinalBlockCore()
     LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
               "Final block proposed with "
                   << m_finalBlock->GetHeader().GetNumTxs() << " transactions.");
-}
-
-void DirectoryService::AppendSharingSetupToFinalBlockMessage(
-    vector<unsigned char>& finalBlockMessage, unsigned int curr_offset)
-{
-    // Transaction body sharing setup
-    // Everyone (DS and non-DS) needs to remember their sharing assignments for this particular block
-
-    // Transaction body sharing assignments:
-    // PART 1. Select X random nodes from DS committee for receiving Tx bodies and broadcasting to other DS nodes
-    // PART 2. Select X random nodes per shard for receiving Tx bodies and broadcasting to other nodes in the shard
-    // PART 3. Select X random nodes per shard for sending Tx bodies to the receiving nodes in other committees (DS and shards)
-
-    // Message format:
-    // [4-byte num of DS nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committees]
-    // [4-byte num of committee receiving nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committee sending nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committee receiving nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committee sending nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // ...
-
-    // PART 1
-    // First version: We just take the first X nodes in DS committee
-    LOG_MARKER();
-
-    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "debug " << m_mediator.m_DSCommitteeNetworkInfo.size() << " "
-                       << TX_SHARING_CLUSTER_SIZE);
-
-    uint32_t num_ds_nodes
-        = (m_mediator.m_DSCommitteeNetworkInfo.size() < TX_SHARING_CLUSTER_SIZE)
-        ? m_mediator.m_DSCommitteeNetworkInfo.size()
-        : TX_SHARING_CLUSTER_SIZE;
-    Serializable::SetNumber<uint32_t>(finalBlockMessage, curr_offset,
-                                      num_ds_nodes, sizeof(uint32_t));
-    curr_offset += sizeof(uint32_t);
-    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "Forwarders inside the DS committee (" << num_ds_nodes << "):");
-
-    for (unsigned int i = 0; i < m_consensusMyID; i++)
-    {
-        m_mediator.m_DSCommitteeNetworkInfo.at(i).Serialize(finalBlockMessage,
-                                                            curr_offset);
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  m_mediator.m_DSCommitteeNetworkInfo.at(i));
-        curr_offset += IP_SIZE + PORT_SIZE;
-    }
-
-    // when i == m_consensusMyID use m_mediator.m_selfPeer since IP/ port in
-    // m_mediator.m_DSCommitteeNetworkInfo.at(m_consensusMyID) is zeroed out
-    m_mediator.m_selfPeer.Serialize(finalBlockMessage, curr_offset);
-    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              m_mediator.m_selfPeer);
-    curr_offset += IP_SIZE + PORT_SIZE;
-
-    for (unsigned int i = m_consensusMyID + 1; i < num_ds_nodes; i++)
-    {
-        m_mediator.m_DSCommitteeNetworkInfo.at(i).Serialize(finalBlockMessage,
-                                                            curr_offset);
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  m_mediator.m_DSCommitteeNetworkInfo.at(i));
-        curr_offset += IP_SIZE + PORT_SIZE;
-    }
-
-    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "Number of shards: " << m_shards.size());
-
-    Serializable::SetNumber<uint32_t>(finalBlockMessage, curr_offset,
-                                      (uint32_t)m_shards.size(),
-                                      sizeof(uint32_t));
-    curr_offset += sizeof(uint32_t);
-
-    // PART 2 and 3
-    // First version: We just take the first X nodes for receiving and next X nodes for sending
-    for (unsigned int i = 0; i < m_shards.size(); i++)
-    {
-        const map<PubKey, Peer>& shard = m_shards.at(i);
-
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "Shard " << i << " forwarders:");
-
-        // PART 2
-        uint32_t nodes_recv_lo = 0;
-        uint32_t nodes_recv_hi = nodes_recv_lo + TX_SHARING_CLUSTER_SIZE - 1;
-        if (nodes_recv_hi >= shard.size())
-        {
-            nodes_recv_hi = shard.size() - 1;
-        }
-
-        unsigned int num_nodes = nodes_recv_hi - nodes_recv_lo + 1;
-
-        Serializable::SetNumber<uint32_t>(finalBlockMessage, curr_offset,
-                                          num_nodes, sizeof(uint32_t));
-        curr_offset += sizeof(uint32_t);
-
-        map<PubKey, Peer>::const_iterator node_peer = shard.begin();
-        for (unsigned int j = 0; j < num_nodes; j++)
-        {
-            node_peer->second.Serialize(finalBlockMessage, curr_offset);
-            curr_offset += IP_SIZE + PORT_SIZE;
-
-            LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                      node_peer->second);
-
-            node_peer++;
-        }
-
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "Shard " << i << " senders:");
-
-        // PART 3
-        uint32_t nodes_send_lo = 0;
-        uint32_t nodes_send_hi = 0;
-
-        if (shard.size() <= TX_SHARING_CLUSTER_SIZE)
-        {
-            nodes_send_lo = nodes_recv_lo;
-            nodes_send_hi = nodes_recv_hi;
-        }
-        else if (shard.size() < (2 * TX_SHARING_CLUSTER_SIZE))
-        {
-            nodes_send_lo = shard.size() - TX_SHARING_CLUSTER_SIZE;
-            nodes_send_hi = nodes_send_lo + TX_SHARING_CLUSTER_SIZE - 1;
-        }
-        else
-        {
-            nodes_send_lo = TX_SHARING_CLUSTER_SIZE;
-            nodes_send_hi = nodes_send_lo + TX_SHARING_CLUSTER_SIZE - 1;
-        }
-
-        num_nodes = nodes_send_hi - nodes_send_lo + 1;
-
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "DEBUG lo " << nodes_send_lo);
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "DEBUG hi " << nodes_send_hi);
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "DEBUG num_nodes " << num_nodes);
-
-        Serializable::SetNumber<uint32_t>(finalBlockMessage, curr_offset,
-                                          num_nodes, sizeof(uint32_t));
-        curr_offset += sizeof(uint32_t);
-
-        node_peer = shard.begin();
-        advance(node_peer, nodes_send_lo);
-
-        for (unsigned int j = 0; j < num_nodes; j++)
-        {
-            node_peer->second.Serialize(finalBlockMessage, curr_offset);
-            curr_offset += IP_SIZE + PORT_SIZE;
-
-            LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                      node_peer->second);
-
-            node_peer++;
-        }
-    }
-
-    // For this version, DS leader is part of the X nodes to receive and share Tx bodies
-    if (true)
-    {
-        m_sharingAssignment.clear();
-
-        for (unsigned int i = num_ds_nodes;
-             i < m_mediator.m_DSCommitteeNetworkInfo.size(); i++)
-        {
-            m_sharingAssignment.push_back(
-                m_mediator.m_DSCommitteeNetworkInfo.at(i));
-        }
-    }
 }
 
 vector<unsigned char> DirectoryService::ComposeFinalBlockMessage()
@@ -448,9 +267,6 @@ vector<unsigned char> DirectoryService::ComposeFinalBlockMessage()
     ComposeFinalBlockCore(); // stores it in m_finalBlock
 
     m_finalBlock->Serialize(finalBlockMessage, curr_offset);
-    curr_offset += finalBlockMessage.size();
-
-    AppendSharingSetupToFinalBlockMessage(finalBlockMessage, curr_offset);
 
     // At this point, cosigs are still not updated inside m_finalBlockMessage
     // Update will be done in ProcessFinalBlockConsensusWhenDone
@@ -488,8 +304,7 @@ bool DirectoryService::RunConsensusOnFinalBlockWhenDSPrimary()
 
     m_consensusObject.reset(new ConsensusLeader(
         m_consensusID, m_consensusBlockHash, m_consensusMyID,
-        m_mediator.m_selfKey.first, m_mediator.m_DSCommitteePubKeys,
-        m_mediator.m_DSCommitteeNetworkInfo,
+        m_mediator.m_selfKey.first, m_mediator.m_DSCommittee,
         static_cast<unsigned char>(DIRECTORY),
         static_cast<unsigned char>(FINALBLOCKCONSENSUS),
         std::function<bool(const vector<unsigned char>&, unsigned int,
@@ -530,6 +345,10 @@ bool DirectoryService::CheckBlockTypeIsFinal()
                     "Type check failed. Expected: "
                         << (unsigned int)TXBLOCKTYPE::FINAL << " Actual: "
                         << (unsigned int)m_finalBlock->GetHeader().GetType());
+
+        m_consensusObject->SetConsensusErrorCode(
+            ConsensusCommon::INVALID_FINALBLOCK);
+
         return false;
     }
 
@@ -548,6 +367,10 @@ bool DirectoryService::CheckFinalBlockVersion()
             "Version check failed. Expected: "
                 << (unsigned int)BLOCKVERSION::VERSION1 << " Actual: "
                 << (unsigned int)m_finalBlock->GetHeader().GetVersion());
+
+        m_consensusObject->SetConsensusErrorCode(
+            ConsensusCommon::INVALID_FINALBLOCK_VERSION);
+
         return false;
     }
 
@@ -574,6 +397,10 @@ bool DirectoryService::CheckFinalBlockNumber()
                     "Block number check failed. Expected: "
                         << expectedBlocknum
                         << " Actual: " << finalblockBlocknum);
+
+        m_consensusObject->SetConsensusErrorCode(
+            ConsensusCommon::INVALID_FINALBLOCK_NUMBER);
+
         return false;
     }
     else
@@ -620,6 +447,10 @@ bool DirectoryService::CheckPreviousFinalBlockHash()
     if (finalblockPrevHash != expectedPrevHash)
     {
         LOG_GENERAL(WARNING, "Previous hash check failed.");
+
+        m_consensusObject->SetConsensusErrorCode(
+            ConsensusCommon::INVALID_PREV_FINALBLOCK_HASH);
+
         return false;
     }
 
@@ -643,6 +474,10 @@ bool DirectoryService::CheckFinalBlockTimestamp()
                         "Timestamp check failed. Last Tx Block: "
                             << lastTxBlockTimestamp
                             << " Final block: " << finalblockTimestamp);
+
+            m_consensusObject->SetConsensusErrorCode(
+                ConsensusCommon::INVALID_TIMESTAMP);
+
             return false;
         }
     }
@@ -676,6 +511,10 @@ bool DirectoryService::CheckMicroBlockHashes()
         if (!found)
         {
             LOG_GENERAL(WARNING, "cannot find hashes. " << microBlockHash)
+
+            m_consensusObject->SetConsensusErrorCode(
+                ConsensusCommon::FINALBLOCK_MISSING_HASH);
+
             return false;
         }
     }
@@ -707,6 +546,10 @@ bool DirectoryService::CheckMicroBlockHashRoot()
         LOG_GENERAL(WARNING,
                     "Microblock root hash in proposed final block by "
                     "leader is incorrect");
+
+        m_consensusObject->SetConsensusErrorCode(
+            ConsensusCommon::FINALBLOCK_INVALID_MICROBLOCK_ROOT_HASH);
+
         return false;
     }
 
@@ -744,6 +587,10 @@ bool DirectoryService::CheckIsMicroBlockEmpty()
                                     << (microBlock.GetHeader().GetNumTxs() == 0)
                                     << " Received: "
                                     << m_finalBlock->GetIsMicroBlockEmpty()[i]);
+
+                    m_consensusObject->SetConsensusErrorCode(
+                        ConsensusCommon::FINALBLOCK_MICROBLOCK_EMPTY_ERROR);
+
                     return false;
                 }
                 break;
@@ -776,6 +623,10 @@ bool DirectoryService::CheckStateRoot()
                         << stateRoot << ". "
                         << "Received = "
                         << m_finalBlock->GetHeader().GetStateRootHash());
+
+        m_consensusObject->SetConsensusErrorCode(
+            ConsensusCommon::INVALID_FINALBLOCK_STATE_ROOT);
+
         return false;
     }
 
@@ -806,103 +657,6 @@ bool DirectoryService::CheckFinalBlockValidity()
     // TODO: Check parent DS block number (must be = block number of last DS block header in the DS blockchain)
 
     return true;
-}
-
-void DirectoryService::SaveTxnBodySharingAssignment(
-    const vector<unsigned char>& finalblock, unsigned int& curr_offset)
-{
-    // Transaction body sharing setup
-    // Everyone (DS and non-DS) needs to remember their sharing assignments for this particular block
-
-    // Transaction body sharing assignments:
-    // PART 1. Select X random nodes from DS committee for receiving Tx bodies and broadcasting to other DS nodes
-    // PART 2. Select X random nodes per shard for receiving Tx bodies and broadcasting to other nodes in the shard
-    // PART 3. Select X random nodes per shard for sending Tx bodies to the receiving nodes in other committees (DS and shards)
-
-    // Message format:
-    // [4-byte num of DS nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committees]
-    // [4-byte num of committee receiving nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committee sending nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committee receiving nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // [4-byte num of committee sending nodes]
-    //   [16-byte IP] [4-byte port]
-    //   [16-byte IP] [4-byte port]
-    //   ...
-    // ...
-
-    // To-do: Put in the logic here for checking the sharing configuration
-
-    uint32_t num_ds_nodes = Serializable::GetNumber<uint32_t>(
-        finalblock, curr_offset, sizeof(uint32_t));
-    curr_offset += sizeof(uint32_t);
-
-    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "Forwarders inside the DS committee (" << num_ds_nodes << "):");
-
-    vector<Peer> ds_receivers;
-
-    bool i_am_forwarder = false;
-    for (uint32_t i = 0; i < num_ds_nodes; i++)
-    {
-        // TODO: Handle exceptions
-        ds_receivers.push_back(Peer(finalblock, curr_offset));
-        curr_offset += IP_SIZE + PORT_SIZE;
-
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "  IP: " << ds_receivers.back().GetPrintableIPAddress()
-                           << " Port: "
-                           << ds_receivers.back().m_listenPortHost);
-
-        if (ds_receivers.back() == m_mediator.m_selfPeer)
-        {
-            i_am_forwarder = true;
-        }
-    }
-
-    m_sharingAssignment.clear();
-
-    if ((i_am_forwarder == true)
-        && (m_mediator.m_DSCommitteeNetworkInfo.size() > num_ds_nodes))
-    {
-        for (unsigned int i = 0; i < m_mediator.m_DSCommitteeNetworkInfo.size();
-             i++)
-        {
-            bool is_a_receiver = false;
-
-            if (num_ds_nodes > 0)
-            {
-                for (unsigned int j = 0; j < ds_receivers.size(); j++)
-                {
-                    if (m_mediator.m_DSCommitteeNetworkInfo.at(i)
-                        == ds_receivers.at(j))
-                    {
-                        is_a_receiver = true;
-                        break;
-                    }
-                }
-                num_ds_nodes--;
-            }
-
-            if (is_a_receiver == false)
-            {
-                m_sharingAssignment.push_back(
-                    m_mediator.m_DSCommitteeNetworkInfo.at(i));
-            }
-        }
-    }
 }
 
 /** To remove. Redundant code. 
@@ -973,7 +727,8 @@ void DirectoryService::LoadUnavailableMicroBlocks()
                 // bool b = microBlock.GetHeader().GetNumTxs() > 0;
                 m_mediator.m_node->m_unavailableMicroBlocks[blockNum].insert(
                     // {microBlockHash, {b, true}});
-                    {microBlockHash, {false, true}});
+                    {{microBlockHash, microBlock.GetHeader().GetShardID()},
+                     {false, true}});
                 break;
             }
         }
@@ -1033,8 +788,6 @@ bool DirectoryService::FinalBlockValidator(
 
     m_microBlocks.clear();
 
-    SaveTxnBodySharingAssignment(finalblock, curr_offset);
-
     m_finalBlockMessage = finalblock;
 
     return true;
@@ -1061,8 +814,7 @@ bool DirectoryService::RunConsensusOnFinalBlockWhenDSBackup()
     m_consensusObject.reset(new ConsensusBackup(
         m_consensusID, m_consensusBlockHash, m_consensusMyID,
         m_consensusLeaderID, m_mediator.m_selfKey.first,
-        m_mediator.m_DSCommitteePubKeys, m_mediator.m_DSCommitteeNetworkInfo,
-        static_cast<unsigned char>(DIRECTORY),
+        m_mediator.m_DSCommittee, static_cast<unsigned char>(DIRECTORY),
         static_cast<unsigned char>(FINALBLOCKCONSENSUS), func));
 
     if (m_consensusObject == nullptr)

@@ -43,9 +43,12 @@ void DirectoryService::StoreFinalBlockToDisk()
     LOG_MARKER();
 
     // Add finalblock to txblockchain
-    m_mediator.m_txBlockChain.AddBlock(*m_finalBlock);
+    m_mediator.m_node->AddBlock(*m_finalBlock);
     m_mediator.m_currentEpochNum
-        = (uint64_t)m_mediator.m_txBlockChain.GetBlockCount();
+        = (uint64_t)m_mediator.m_txBlockChain.GetLastBlock()
+              .GetHeader()
+              .GetBlockNum()
+        + 1;
 
     // At this point, the transactions in the last Epoch is no longer useful, thus erase.
     m_mediator.m_node->EraseCommittedTransactions(m_mediator.m_currentEpochNum
@@ -70,7 +73,7 @@ bool DirectoryService::SendFinalBlockToLookupNodes()
     vector<unsigned char> finalblock_message
         = {MessageType::NODE, NodeInstructionType::FINALBLOCK};
     finalblock_message.resize(finalblock_message.size() + UINT256_SIZE
-                              + sizeof(uint32_t) + sizeof(uint8_t)
+                              + sizeof(uint32_t) + sizeof(uint32_t)
                               + m_finalBlockMessage.size());
 
     unsigned int curr_offset = MessageOffset::BODY;
@@ -86,10 +89,10 @@ bool DirectoryService::SendFinalBlockToLookupNodes()
                                       m_consensusID, sizeof(uint32_t));
     curr_offset += sizeof(uint32_t);
 
-    // randomly setting shard id to 0 -- shouldn't matter
-    Serializable::SetNumber<uint8_t>(finalblock_message, curr_offset,
-                                     (uint8_t)0, sizeof(uint8_t));
-    curr_offset += sizeof(uint8_t);
+    // always setting shard id to 0 -- shouldn't matter
+    Serializable::SetNumber<uint32_t>(finalblock_message, curr_offset,
+                                      (uint32_t)0, sizeof(uint32_t));
+    curr_offset += sizeof(uint32_t);
 
     copy(m_finalBlockMessage.begin(), m_finalBlockMessage.end(),
          finalblock_message.begin() + curr_offset);
@@ -116,10 +119,9 @@ void DirectoryService::DetermineShardsToSendFinalBlockTo(
     //    DS cluster 1 => Shard (num of DS clusters + 1)
     LOG_MARKER();
 
-    unsigned int num_DS_clusters = m_mediator.m_DSCommitteeNetworkInfo.size()
-        / DS_MULTICAST_CLUSTER_SIZE;
-    if ((m_mediator.m_DSCommitteeNetworkInfo.size() % DS_MULTICAST_CLUSTER_SIZE)
-        > 0)
+    unsigned int num_DS_clusters
+        = m_mediator.m_DSCommittee.size() / DS_MULTICAST_CLUSTER_SIZE;
+    if ((m_mediator.m_DSCommittee.size() % DS_MULTICAST_CLUSTER_SIZE) > 0)
     {
         num_DS_clusters++;
     }
@@ -155,12 +157,12 @@ void DirectoryService::SendFinalBlockToShardNodes(
         vector<unsigned char> finalblock_message
             = {MessageType::NODE, NodeInstructionType::FINALBLOCK};
         finalblock_message.resize(finalblock_message.size() + UINT256_SIZE
-                                  + sizeof(uint32_t) + sizeof(uint8_t)
+                                  + sizeof(uint32_t) + sizeof(uint32_t)
                                   + m_finalBlockMessage.size());
 
         copy(m_finalBlockMessage.begin(), m_finalBlockMessage.end(),
              finalblock_message.begin() + MessageOffset::BODY + UINT256_SIZE
-                 + sizeof(uint32_t) + sizeof(uint8_t));
+                 + sizeof(uint32_t) + sizeof(uint32_t));
 
         unsigned int curr_offset = MessageOffset::BODY;
 
@@ -193,8 +195,8 @@ void DirectoryService::SendFinalBlockToShardNodes(
             }
 
             // Modify the shard id part of the message
-            Serializable::SetNumber<uint8_t>(finalblock_message, curr_offset,
-                                             (uint8_t)i, sizeof(uint8_t));
+            Serializable::SetNumber<uint32_t>(finalblock_message, curr_offset,
+                                              (uint32_t)i, sizeof(uint32_t));
 
             SHA2<HASH_TYPE::HASH_VARIANT_256> sha256;
             sha256.Update(finalblock_message);
@@ -300,8 +302,6 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone()
     uint8_t tx_sharing_mode
         = (m_sharingAssignment.size() > 0) ? DS_FORWARD_ONLY : ::IDLE;
     m_mediator.m_node->ActOnFinalBlock(tx_sharing_mode, m_sharingAssignment);
-
-    m_sharingAssignment.clear();
 
     unsigned int my_DS_cluster_num;
     unsigned int my_shards_lo;
@@ -414,6 +414,24 @@ bool DirectoryService::ProcessFinalBlockConsensus(
     // If COLLECTIVESIG also comes in, it's then possible COLLECTIVESIG will be processed before ANNOUNCE!
     // So, ANNOUNCE should acquire a lock here
 
+    std::unique_lock<mutex> cv_lk(m_mutexProcessConsensusMessage);
+    if (cv_processConsensusMessage.wait_for(
+            cv_lk, std::chrono::seconds(CONSENSUS_MSG_ORDER_BLOCK_WINDOW),
+            [this, message, offset]() -> bool {
+                return m_consensusObject->CanProcessMessage(message, offset);
+            }))
+    {
+        // Correct order preserved
+    }
+    else
+    {
+        LOG_GENERAL(
+            WARNING,
+            "Timeout while waiting for correct order of Final Block consensus "
+            "messages");
+        return false;
+    }
+
     lock_guard<mutex> g(m_mutexConsensus);
 
     // Wait until in the case that primary sent announcement pretty early
@@ -470,7 +488,8 @@ bool DirectoryService::ProcessFinalBlockConsensus(
     else
     {
         LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "Consensus state = " << state);
+                  "Consensus state = " << m_consensusObject->GetStateString());
+        cv_processConsensusMessage.notify_all();
     }
 
     return result;
