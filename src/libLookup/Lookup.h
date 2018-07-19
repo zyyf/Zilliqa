@@ -101,7 +101,8 @@ class Lookup : public Executable, public Broadcastable
                              boost::multiprecision::uint256_t highBlockNum);
     std::vector<unsigned char>
     ComposeGetTxBlockMessage(boost::multiprecision::uint256_t lowBlockNum,
-                             boost::multiprecision::uint256_t highBlockNum);
+                             boost::multiprecision::uint256_t highBlockNum,
+                             uint8_t chunks = 0);
 
     std::vector<unsigned char> ComposeGetLookupOfflineMessage();
     std::vector<unsigned char> ComposeGetLookupOnlineMessage();
@@ -148,14 +149,16 @@ public:
     bool GetDSBlockFromSeedNodes(boost::multiprecision::uint256_t lowBlockNum,
                                  boost::multiprecision::uint256_t highBlockNum);
     bool GetTxBlockFromSeedNodes(boost::multiprecision::uint256_t lowBlockNum,
-                                 boost::multiprecision::uint256_t highBlockNum);
+                                 boost::multiprecision::uint256_t highBlockNum,
+                                 uint8_t chunks = 0);
     bool GetDSInfoFromLookupNodes();
     bool
     GetDSBlockFromLookupNodes(boost::multiprecision::uint256_t lowBlockNum,
                               boost::multiprecision::uint256_t highBlockNum);
     bool
     GetTxBlockFromLookupNodes(boost::multiprecision::uint256_t lowBlockNum,
-                              boost::multiprecision::uint256_t highBlockNum);
+                              boost::multiprecision::uint256_t highBlockNum,
+                              uint8_t chunks = 0);
     bool GetTxBodyFromSeedNodes(std::string txHashStr);
     bool GetStateFromLookupNodes();
 

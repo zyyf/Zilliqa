@@ -827,17 +827,9 @@ Json::Value Server::DSBlockListing(unsigned int page)
     if (page <= NUM_PAGES_CACHE) //can use cache
     {
 
-        boost::multiprecision::uint256_t cacheSize(
-            m_DSBlockCache.second.capacity());
-        if (cacheSize > m_DSBlockCache.second.size())
-        {
-            cacheSize = m_DSBlockCache.second.size();
-        }
+        unsigned int size = m_DSBlockCache.second.size();
 
-        boost::multiprecision::uint256_t size = m_DSBlockCache.second.size();
-
-        for (unsigned int i = offset; i < PAGE_SIZE + offset && i < cacheSize;
-             i++)
+        for (unsigned int i = offset; i < PAGE_SIZE + offset && i < size; i++)
         {
             tmpJson.clear();
             tmpJson["Hash"] = m_DSBlockCache.second[size - i - 1];
@@ -935,18 +927,9 @@ Json::Value Server::TxBlockListing(unsigned int page)
     if (page <= NUM_PAGES_CACHE) //can use cache
     {
 
-        boost::multiprecision::uint256_t cacheSize(
-            m_TxBlockCache.second.capacity());
+        unsigned int size = m_TxBlockCache.second.size();
 
-        if (cacheSize > m_TxBlockCache.second.size())
-        {
-            cacheSize = m_TxBlockCache.second.size();
-        }
-
-        boost::multiprecision::uint256_t size = m_TxBlockCache.second.size();
-
-        for (unsigned int i = offset; i < PAGE_SIZE + offset && i < cacheSize;
-             i++)
+        for (unsigned int i = offset; i < PAGE_SIZE + offset && i < size; i++)
         {
             tmpJson.clear();
             tmpJson["Hash"] = m_TxBlockCache.second[size - i - 1];
@@ -1000,16 +983,10 @@ Json::Value Server::GetRecentTransactions()
 
     lock_guard<mutex> g(m_mutexRecentTxns);
     Json::Value _json;
-    boost::multiprecision::uint256_t actualSize(
-        m_RecentTransactions.capacity());
-    if (actualSize > m_RecentTransactions.size())
-    {
-        actualSize = m_RecentTransactions.size();
-    }
-    boost::multiprecision::uint256_t size = m_RecentTransactions.size();
-    _json["number"] = int(actualSize);
+    unsigned int size = m_RecentTransactions.size();
+    _json["number"] = size;
     _json["TxnHashes"] = Json::Value(Json::arrayValue);
-    for (boost::multiprecision::uint256_t i = 0; i < actualSize; i++)
+    for (unsigned int i = 0; i < size; i++)
     {
         _json["TxnHashes"].append(m_RecentTransactions[size - i - 1]);
     }

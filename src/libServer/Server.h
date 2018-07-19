@@ -15,7 +15,7 @@
 **/
 
 #include "libData/BlockData/BlockHeader/BlockHeaderBase.h"
-#include "libData/DataStructures/CircularArray.h"
+#include "libData/DataStructures/FixedSizeQueue.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include <jsonrpccpp/server.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
@@ -493,11 +493,11 @@ class Server : public AbstractZServer
         m_TxBlockCountSumPair;
     boost::multiprecision::uint256_t m_StartTimeTx;
     boost::multiprecision::uint256_t m_StartTimeDs;
-    std::pair<boost::multiprecision::uint256_t, CircularArray<std::string>>
+    std::pair<boost::multiprecision::uint256_t, FixedSizeQueue<std::string>>
         m_DSBlockCache;
-    std::pair<boost::multiprecision::uint256_t, CircularArray<std::string>>
+    std::pair<boost::multiprecision::uint256_t, FixedSizeQueue<std::string>>
         m_TxBlockCache;
-    static CircularArray<std::string> m_RecentTransactions;
+    static FixedSizeQueue<std::string> m_RecentTransactions;
     static std::mutex m_mutexRecentTxns;
 
 public:

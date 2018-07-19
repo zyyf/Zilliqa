@@ -292,11 +292,12 @@ bool Lookup::GetDSBlockFromLookupNodes(uint256_t lowBlockNum,
 }
 
 vector<unsigned char> Lookup::ComposeGetTxBlockMessage(uint256_t lowBlockNum,
-                                                       uint256_t highBlockNum)
+                                                       uint256_t highBlockNum,
+                                                       uint8_t chunks)
 {
     LOG_MARKER();
 
-    // getTxBlockMessage = [lowBlockNum][highBlockNum][Port]
+    // getTxBlockMessage = [lowBlockNum][highBlockNum][Chunks][Port]
     vector<unsigned char> getTxBlockMessage
         = {MessageType::LOOKUP, LookupInstructionType::GETTXBLOCKFROMSEED};
     unsigned int curr_offset = MessageOffset::BODY;
@@ -309,6 +310,11 @@ vector<unsigned char> Lookup::ComposeGetTxBlockMessage(uint256_t lowBlockNum,
                                        highBlockNum, UINT256_SIZE);
     curr_offset += UINT256_SIZE;
 
+    Serializable::SetNumber<uint32_t>(getTxBlockMessage, curr_offset, chunks,
+                                      sizeof(uint32_t));
+
+    curr_offset += sizeof(uint32_t);
+
     Serializable::SetNumber<uint32_t>(getTxBlockMessage, curr_offset,
                                       m_mediator.m_selfPeer.m_listenPortHost,
                                       sizeof(uint32_t));
@@ -320,7 +326,7 @@ vector<unsigned char> Lookup::ComposeGetTxBlockMessage(uint256_t lowBlockNum,
 // low and high denote the range of blocknumbers being requested(inclusive).
 // use 0 to denote the latest blocknumber since obviously no one will request for the genesis block
 bool Lookup::GetTxBlockFromSeedNodes(uint256_t lowBlockNum,
-                                     uint256_t highBlockNum)
+                                     uint256_t highBlockNum, uint8_t chunks)
 {
     LOG_MARKER();
     SendMessageToSeedNodes(ComposeGetTxBlockMessage(lowBlockNum, highBlockNum));
@@ -328,12 +334,25 @@ bool Lookup::GetTxBlockFromSeedNodes(uint256_t lowBlockNum,
 }
 
 bool Lookup::GetTxBlockFromLookupNodes(uint256_t lowBlockNum,
-                                       uint256_t highBlockNum)
+                                       uint256_t highBlockNum, uint8_t chunks)
 {
-    LOG_MARKER();
 
-    SendMessageToRandomLookupNode(
-        ComposeGetTxBlockMessage(lowBlockNum, highBlockNum));
+    LOG_MARKER();
+    if (chunks == 0)
+    {
+        SendMessageToRandomLookupNode(
+            ComposeGetTxBlockMessage(lowBlockNum, highBlockNum));
+    }
+    else
+    {
+        for (uint256_t blockNum = lowBlockNum; blockNum <= highBlockNum;
+             blockNum += chunks)
+        {
+            uint256_t lastBlockNum = min(blockNum + chunks - 1, highBlockNum);
+            SendMessageToRandomLookupNode(
+                ComposeGetTxBlockMessage(blockNum, lastBlockNum));
+        }
+    }
 
     return true;
 }
@@ -900,7 +919,7 @@ bool Lookup::ProcessGetTxBlockFromSeed(const vector<unsigned char>& message,
                                        unsigned int offset, const Peer& from)
 {
     // #ifndef IS_LOOKUP_NODE // TODO: remove the comment
-    // Message = [32-byte lowBlockNum][32-byte highBlockNum][4-byte portNo]
+    // Message = [32-byte lowBlockNum][32-byte highBlockNum]{Chunks][4-byte portNo]
 
     LOG_MARKER();
 
@@ -921,14 +940,24 @@ bool Lookup::ProcessGetTxBlockFromSeed(const vector<unsigned char>& message,
         = Serializable::GetNumber<uint256_t>(message, offset, UINT256_SIZE);
     offset += UINT256_SIZE;
 
+    uint32_t chunks
+        = Serializable::GetNumber<uint32_t>(message, offset, sizeof(uint32_t));
+
+    offset += sizeof(uint32_t);
+
     if (lowBlockNum == 1)
     {
         lowBlockNum = m_mediator.m_txBlockChain.GetBlockCount() - 1;
     }
 
-    if (highBlockNum == 0)
+    if (highBlockNum == 0 && chunks == 0)
     {
         highBlockNum = m_mediator.m_txBlockChain.GetBlockCount() - 1;
+    }
+    else if (chunks > 0)
+    {
+        highBlockNum = min(m_mediator.m_txBlockChain.GetBlockCount() - 1,
+                           lowBlockNum + chunks - 1);
     }
 
     LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
@@ -936,7 +965,7 @@ bool Lookup::ProcessGetTxBlockFromSeed(const vector<unsigned char>& message,
                   << from << " for blocks " << lowBlockNum.convert_to<string>()
                   << " to " << highBlockNum.convert_to<string>());
 
-    // txBlockMessage = [lowBlockNum][highBlockNum][TxBlock][TxBlock]... (highBlockNum - lowBlockNum + 1) times
+    // txBlockMessage = [lowBlockNum][highBlockNum][TxBlock][TxBlock]... (highBlockNum - lowBlockNum + 1)(isLatestBlock) times
     vector<unsigned char> txBlockMessage
         = {MessageType::LOOKUP, LookupInstructionType::SETTXBLOCKFROMSEED};
     unsigned int curr_offset = MessageOffset::BODY;
@@ -984,6 +1013,17 @@ bool Lookup::ProcessGetTxBlockFromSeed(const vector<unsigned char>& message,
         Serializable::SetNumber<uint256_t>(txBlockMessage, highBlockNumOffset,
                                            blockNum - 1, UINT256_SIZE);
     }
+
+    //1 byte value to tell if the latest block available is sent
+    uint8_t isLatestBlock = 0;
+    if (blockNum == m_mediator.m_txBlockChain.GetBlockCount())
+    {
+        isLatestBlock = 1;
+    }
+
+    Serializable::SetNumber<uint8_t>(txBlockMessage, curr_offset, isLatestBlock,
+                                     sizeof(uint8_t));
+    curr_offset += sizeof(uint8_t);
 
     // 4-byte portNo
     uint32_t portNo
