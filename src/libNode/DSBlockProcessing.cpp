@@ -312,8 +312,8 @@ bool Node::ProcessDSBlock(const vector<unsigned char>& message,
                .GetHeader()
                .GetMinerPubKey())
     {
-        m_mediator.m_ds->RequestAllPoW2();
-        m_mediator.m_ds->RequestAllPoWConn();
+        //m_mediator.m_ds->RequestAllPoW2();
+        //m_mediator.m_ds->RequestAllPoWConn();
     }
 
     UpdateDSCommiteeComposition(newleaderIP);
@@ -345,8 +345,7 @@ bool Node::ProcessDSBlock(const vector<unsigned char>& message,
         LOG_STATE("[IDENT][" << std::setw(15) << std::left
                              << m_mediator.m_selfPeer.GetPrintableIPAddress()
                              << "][0     ] DSLD");
-        m_mediator.m_ds->ScheduleShardingConsensus(
-            LEADER_POW2_WINDOW_IN_SECONDS);
+        m_mediator.m_ds->StartRoleAsNewDSLeader();
     }
     else
     {

@@ -18,6 +18,7 @@
 #include <chrono>
 #include <thread>
 
+#include "DSBlockConsensusMessage.h"
 #include "DirectoryService.h"
 #include "common/Constants.h"
 #include "common/Messages.h"
@@ -38,6 +39,7 @@ using namespace std;
 using namespace boost::multiprecision;
 
 #ifndef IS_LOOKUP_NODE
+
 void DirectoryService::ComposeDSBlock()
 {
     LOG_MARKER();
@@ -74,7 +76,7 @@ void DirectoryService::ComposeDSBlock()
     // Assemble DS block
     {
         lock_guard<mutex> g(m_mutexPendingDSBlock);
-        // To-do: Handle exceptions.
+        // TODO: Handle exceptions.
         m_pendingDSBlock.reset(
             new DSBlock(DSBlockHeader(difficulty, prevHash, winnerNonce,
                                       winnerKey, m_mediator.m_selfKey.second,
@@ -87,14 +89,107 @@ void DirectoryService::ComposeDSBlock()
                                                            << winnerNonce);
 }
 
+void DirectoryService::ComputeSharding()
+{
+    // Aggregate validated PoW2 submissions into m_allPoWs and m_allPoWConns
+
+    LOG_MARKER();
+
+    m_shards.clear();
+    m_publicKeyToShardIdMap.clear();
+
+    uint32_t numOfComms = m_allPoW2s.size() / COMM_SIZE;
+
+    if (numOfComms == 0)
+    {
+        LOG_GENERAL(WARNING,
+                    "Zero Pow2 collected, numOfComms is temporarlly set to 1");
+        numOfComms = 1;
+    }
+
+    for (unsigned int i = 0; i < numOfComms; i++)
+    {
+        m_shards.push_back(map<PubKey, Peer>());
+    }
+
+    for (auto& kv : m_allPoW2s)
+    {
+        PubKey key = kv.first;
+        uint256_t nonce = kv.second;
+        // sort all PoW2 submissions according to H(nonce, pubkey)
+        SHA2<HASH_TYPE::HASH_VARIANT_256> sha2;
+        vector<unsigned char> hashVec;
+        hashVec.resize(POW_SIZE + PUB_KEY_SIZE);
+        Serializable::SetNumber<uint256_t>(hashVec, 0, nonce, UINT256_SIZE);
+        key.Serialize(hashVec, POW_SIZE);
+        sha2.Update(hashVec);
+        const vector<unsigned char>& sortHashVec = sha2.Finalize();
+        array<unsigned char, BLOCK_HASH_SIZE> sortHash;
+        copy(sortHashVec.begin(), sortHashVec.end(), sortHash.begin());
+        m_sortedPoW2s.insert(make_pair(sortHash, key));
+    }
+
+    lock_guard<mutex> g(m_mutexAllPoWConns, adopt_lock);
+    unsigned int i = 0;
+    for (auto& kv : m_sortedPoW2s)
+    {
+        PubKey key = kv.second;
+        map<PubKey, Peer>& shard = m_shards.at(i % numOfComms);
+        shard.insert(make_pair(key, m_allPoWConns.at(key)));
+        m_publicKeyToShardIdMap.insert(make_pair(key, i % numOfComms));
+        i++;
+    }
+}
+
 bool DirectoryService::RunConsensusOnDSBlockWhenDSPrimary()
 {
     LOG_MARKER();
 
-    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "I am the leader DS node. Creating DS block.");
+    LOG_EPOCH(
+        INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
+        "I am the leader DS node. Creating DS block and sharding structure.");
 
+    // DS leader will announce: DSBlock + Sharding structure + Txn sharing assignments
     ComposeDSBlock();
+
+    // Populate the list of nodes to include in the shards
+    {
+        lock_guard<mutex> g(m_mutexAllPOW1);
+
+        if (m_mode != IDLE)
+        {
+            // Copy POW1 to POW2
+            lock(m_mutexAllPOW2, m_mutexAllPoWConns);
+            lock_guard<mutex> g2(m_mutexAllPOW2, adopt_lock);
+            lock_guard<mutex> g3(m_mutexAllPoWConns, adopt_lock);
+            m_allPoW2s.clear();
+
+            Peer winnerpeer = m_allPoWConns.at(
+                m_pendingDSBlock->GetHeader().GetMinerPubKey());
+
+            for (auto const& i : m_allPoW1s)
+            {
+                // Winner will become DS (leader), thus we should not put in POW2
+                if (m_allPoWConns[i.first] == winnerpeer)
+                {
+                    continue;
+                }
+
+                m_allPoW2s.emplace(i.first, i.second);
+            }
+
+            // Add the previous DS committee's oldest member, because it will be back to being a normal node and should be collected here
+            lock_guard<mutex> g4(m_mediator.m_mutexDSCommittee);
+            m_allPoW2s.emplace(m_mediator.m_DSCommittee.back().first,
+                               (boost::multiprecision::uint256_t){1});
+            m_allPoWConns.emplace(m_mediator.m_DSCommittee.back().first,
+                                  m_mediator.m_DSCommittee.back().second);
+        }
+
+        m_allPoW1s.clear();
+    }
+
+    ComputeSharding();
 
     // Create new consensus object
     // Dummy values for now
@@ -130,10 +225,26 @@ bool DirectoryService::RunConsensusOnDSBlockWhenDSPrimary()
     ConsensusLeader* cl
         = dynamic_cast<ConsensusLeader*>(m_consensusObject.get());
 
-    vector<unsigned char> m;
+    m_DSBlockConsensusRawMessage.clear();
+
     {
         lock_guard<mutex> g(m_mutexPendingDSBlock);
-        m_pendingDSBlock->Serialize(m, 0);
+
+        unsigned int curr_offset = 0;
+
+        // DS Block
+        m_pendingDSBlock->Serialize(m_DSBlockConsensusRawMessage, curr_offset);
+        curr_offset += m_DSBlockConsensusRawMessage.size();
+
+        // Sharding structure
+        curr_offset += DSBlockConsensusMessage::SerializeShardingStructure(
+            m_shards, m_DSBlockConsensusRawMessage, curr_offset);
+
+        // Txn sharing assignments
+        DSBlockConsensusMessage::ComputeAndSerializeTxnSharingAssignments(
+            m_mediator.m_DSCommittee, m_consensusMyID, m_mediator.m_selfPeer,
+            m_shards, m_sharingAssignment, m_DSBlockConsensusRawMessage,
+            curr_offset);
     }
 
     LOG_STATE("[DSCON][" << std::setw(15) << std::left
@@ -141,40 +252,101 @@ bool DirectoryService::RunConsensusOnDSBlockWhenDSPrimary()
                          << "][" << m_mediator.m_txBlockChain.GetBlockCount()
                          << "] BGIN");
 
-    cl->StartConsensus(m, DSBlockHeader::SIZE);
+    cl->StartConsensus(m_DSBlockConsensusRawMessage, DSBlockHeader::SIZE);
 
     return true;
 }
 
-bool DirectoryService::DSBlockValidator(const vector<unsigned char>& dsblock,
+bool DirectoryService::DSBlockValidator(const vector<unsigned char>& msg,
                                         std::vector<unsigned char>& errorMsg)
 {
     LOG_MARKER();
 
-    // To-do: Put in the logic here for checking the proposed DS block
+    // TODO: Put in the logic here for checking the proposed DS block
+
     lock(m_mutexPendingDSBlock, m_mutexAllPoWConns);
     lock_guard<mutex> g(m_mutexPendingDSBlock, adopt_lock);
     lock_guard<mutex> g2(m_mutexAllPoWConns, adopt_lock);
 
-    m_pendingDSBlock.reset(new DSBlock(dsblock, 0));
+    unsigned int curr_offset = 0;
+    bool result = false;
+
+    // DS Block
+    m_pendingDSBlock.reset(new DSBlock(msg, 0));
+    curr_offset = m_pendingDSBlock->GetSerializedSize();
+
+    // Populate the list of nodes we expect to be included in the shards
+    {
+        // Copy POW1 to POW2
+        lock(m_mutexAllPOW1, m_mutexAllPOW1);
+        lock_guard<mutex> g3(m_mutexAllPOW1, adopt_lock);
+        lock_guard<mutex> g4(m_mutexAllPOW1, adopt_lock);
+
+        m_allPoW2s.clear();
+        Peer winnerpeer
+            = m_allPoWConns.at(m_pendingDSBlock->GetHeader().GetMinerPubKey());
+
+        for (auto const& i : m_allPoW1s)
+        {
+            // Winner will become DS (leader), thus we should not put in POW2
+            if (m_allPoWConns[i.first] == winnerpeer)
+            {
+                continue;
+            }
+
+            m_allPoW2s.emplace(i.first, i.second);
+        }
+
+        // Add the previous DS committee's oldest member, because it will be back to being a normal node and should be collected here
+        lock_guard<mutex> g5(m_mediator.m_mutexDSCommittee);
+        m_allPoW2s.emplace(m_mediator.m_DSCommittee.back().first,
+                           (boost::multiprecision::uint256_t){1});
+        m_allPoWConns.emplace(m_mediator.m_DSCommittee.back().first,
+                              m_mediator.m_DSCommittee.back().second);
+
+        m_allPoW1s.clear();
+    }
+
+    // Sharding structure
+    result = DSBlockConsensusMessage::DeserializeAndValidateShardingStructure(
+        msg, curr_offset, m_allPoWConns, m_shards, m_publicKeyToShardIdMap);
+    if (result == false)
+    {
+        LOG_EPOCH(
+            WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+            "DeserializeAndValidateShardingStructure failed! What to do?");
+    }
+
+    // Txn sharing assignments
+    result
+        = DSBlockConsensusMessage::DeserializeAndValidateTxnSharingAssignments(
+            msg, curr_offset, m_mediator.m_DSCommittee, m_mediator.m_selfPeer,
+            m_sharingAssignment);
+    if (result == false)
+    {
+        LOG_EPOCH(
+            WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+            "DeserializeAndValidateTxnSharingAssignments failed! What to do?");
+    }
 
     if (m_allPoWConns.find(m_pendingDSBlock->GetHeader().GetMinerPubKey())
         == m_allPoWConns.end())
     {
-        LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "Winning node of PoW1 not inside m_allPoWConns! Getting "
-                  "from ds leader");
-
-        m_hasAllPoWconns = false;
-        std::unique_lock<std::mutex> lk(m_MutexCVAllPowConn);
-
-        RequestAllPoWConn();
-        while (!m_hasAllPoWconns)
-        {
-            cv_allPowConns.wait(lk);
-        }
+        LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+                  "Winning node of PoW1 not inside m_allPoWConns! What to do?");
+        result = false;
     }
-    return true;
+
+    if (result == false)
+    {
+        m_DSBlockConsensusRawMessage.clear();
+    }
+    else
+    {
+        m_DSBlockConsensusRawMessage = msg;
+    }
+
+    return result;
 }
 
 bool DirectoryService::RunConsensusOnDSBlockWhenDSBackup()
@@ -182,7 +354,8 @@ bool DirectoryService::RunConsensusOnDSBlockWhenDSBackup()
     LOG_MARKER();
 
     LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "I am a backup DS node. Waiting for DS block announcement.");
+              "I am a backup DS node. Waiting for DS block and sharding "
+              "structure announcement.");
 
     // Dummy values for now
     uint32_t consensusID = 0x0;
@@ -213,6 +386,7 @@ bool DirectoryService::RunConsensusOnDSBlockWhenDSBackup()
 void DirectoryService::RunConsensusOnDSBlock(bool isRejoin)
 {
     LOG_MARKER();
+
     SetState(DSBLOCK_CONSENSUS_PREP);
 
     {
@@ -242,7 +416,6 @@ void DirectoryService::RunConsensusOnDSBlock(bool isRejoin)
         {
             LOG_GENERAL(WARNING,
                         "Error after RunConsensusOnDSBlockWhenDSPrimary");
-            // throw exception();
             return;
         }
     }
@@ -252,7 +425,6 @@ void DirectoryService::RunConsensusOnDSBlock(bool isRejoin)
         {
             LOG_GENERAL(WARNING,
                         "Error after RunConsensusOnDSBlockWhenDSBackup");
-            // throw exception();
             return;
         }
     }
