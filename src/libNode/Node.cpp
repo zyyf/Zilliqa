@@ -53,7 +53,7 @@ void addBalanceToGenesisAccount()
 {
     LOG_MARKER();
 
-    const uint256_t bal{100000000000};
+    const uint256_t bal{std::numeric_limits<uint64_t>::max()};
     const uint256_t nonce{0};
 
     for (auto& walletHexStr : GENESIS_WALLETS)
@@ -600,7 +600,7 @@ bool Node::ProcessTxnPacketFromLookup(
         }
         if (m_mediator.m_validator->CheckCreatedTransactionFromLookup(tx))
         {
-            LOG_GENERAL(INFO,"HEREE");
+            LOG_GENERAL(INFO, "HEREE");
             lock_guard<mutex> g(m_mutexCreatedTransactions);
             auto& listIdx
                 = m_createdTransactions.get<MULTI_INDEX_KEY::GAS_PRICE>();
@@ -758,6 +758,9 @@ void Node::CleanCreatedTransaction()
     // m_createdTransactions.clear();
     m_createdTransactions.get<0>().clear();
 }
+
+void Node::SetMyShardID(uint32_t shardID) { m_myShardID = shardID; }
+
 #endif // IS_LOOKUP_NODE
 
 bool Node::ProcessDoRejoin(
