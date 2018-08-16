@@ -210,7 +210,7 @@ bool JSONConversion::checkJsonTx(const Json::Value& _json)
             LOG_GENERAL(INFO, "Fault in nonce");
             return false;
         }
-        if (!_json["amount"].isIntegral())
+        if (!_json["amount"].isString())
         {
             LOG_GENERAL(INFO, "Fault in amount");
             return false;
