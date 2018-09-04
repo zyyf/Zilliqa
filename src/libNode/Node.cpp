@@ -682,6 +682,8 @@ bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
         lock_guard<mutex> g(m_mutexCreatedTransactions);
         auto& compIdx
             = m_createdTransactions.get<MULTI_INDEX_KEY::ADDR_NONCE>();
+        LOG_GENERAL(INFO,
+                    "MultiIndexContainer size before: " << compIdx.size());
         for (unsigned int i = 0; i < num; i++)
         {
             Transaction tx;
@@ -720,6 +722,7 @@ bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
 
             curr_offset += tx.GetSerializedSize();
         }
+        LOG_GENERAL(INFO, "MultiIndexContainer size after: " << compIdx.size());
     }
     LOG_GENERAL(INFO, "TXN COUNT" << txn_sent_count);
 
