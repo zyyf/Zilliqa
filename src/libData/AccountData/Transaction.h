@@ -46,6 +46,7 @@ class Transaction : public Serializable
     std::vector<unsigned char> m_code;
     std::vector<unsigned char> m_data;
     Signature m_signature;
+    TxnHash m_senderNonceHash;
 
 public:
     /// Default constructor.
@@ -96,6 +97,11 @@ public:
 
     /// Returns the transaction ID.
     const TxnHash& GetTranID() const;
+
+    /// Returns the hash of sender Addr + nonce
+    const TxnHash& GetSenderNonceHash() const;
+
+    void SetSenderNonceHash();
 
     /// Returns the current version.
     const boost::multiprecision::uint256_t& GetVersion() const;

@@ -27,7 +27,7 @@ enum MULTI_INDEX_KEY : unsigned int
 {
     GAS_PRICE = 0,
     TXN_ID,
-    ADDR_NONCE
+    SENDER_NONCE
 };
 
 typedef boost::multi_index::ordered_non_unique<
@@ -41,14 +41,17 @@ typedef boost::multi_index::hashed_unique<boost::multi_index::const_mem_fun<
     Transaction, const TxnHash&, &Transaction::GetTranID>>
     hashed_unique_txnid_key;
 
-typedef boost::multi_index::ordered_unique<boost::multi_index::composite_key<
-    Transaction,
-    boost::multi_index::const_mem_fun<Transaction, Address,
-                                      &Transaction::GetSenderAddr>,
-    boost::multi_index::const_mem_fun<Transaction,
-                                      const boost::multiprecision::uint256_t&,
-                                      &Transaction::GetNonce>>>
-    ordered_unique_comp_addr_nonce_key;
+// typedef boost::multi_index::hashed_unique<boost::multi_index::composite_key<
+//     Transaction,
+//     boost::multi_index::const_mem_fun<Transaction, Address,
+//                                       &Transaction::GetSenderAddr>,
+//     boost::multi_index::const_mem_fun<Transaction,
+//                                       const boost::multiprecision::uint256_t&,
+//                                       &Transaction::GetNonce>>>
+
+typedef boost::multi_index::hashed_unique<boost::multi_index::const_mem_fun<
+    Transaction, const TxnHash&, &Transaction::GetSenderNonceHash>>
+    hashed_unique_sender_nonce_hash_key;
 
 namespace boost
 {
@@ -67,5 +70,5 @@ typedef boost::multi_index::multi_index_container<
     Transaction,
     boost::multi_index::indexed_by<ordered_non_unique_gas_key,
                                    hashed_unique_txnid_key,
-                                   ordered_unique_comp_addr_nonce_key>>
+                                   hashed_unique_sender_nonce_hash_key>>
     gas_txnid_comp_txns;

@@ -82,10 +82,12 @@ BOOST_AUTO_TEST_CASE(MultiIndex_test)
 
     BOOST_CHECK_MESSAGE(*it == tx1, "txn found in hashIdx is not identical");
 
-    auto& compIdx = container.get<MULTI_INDEX_KEY::ADDR_NONCE>();
-    auto it2 = compIdx.find(make_tuple(tx2.GetSenderAddr(), tx2.GetNonce()));
-    BOOST_CHECK_MESSAGE(compIdx.end() != it2, "txn is not found");
+#ifndef IS_LOOKUP_NODE
+    auto& senderNonceIdx = container.get<MULTI_INDEX_KEY::SENDER_NONCE>();
+    auto it2 = senderNonceIdx.find(tx2.GetSenderNonceHash());
+    BOOST_CHECK_MESSAGE(senderNonceIdx.end() != it2, "txn is not found");
     BOOST_CHECK_MESSAGE(*it2 == tx2, "txn found in compIdx is not identical");
+#endif // IS_LOOKUP_NODE
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -570,15 +570,15 @@ void Node::ProcessTransactionWhenShardLeader()
     };
 
     auto findSameNonceButHigherGasPrice = [this](Transaction& t) -> void {
-        auto& compIdx
-            = m_createdTransactions.get<MULTI_INDEX_KEY::ADDR_NONCE>();
-        auto it = compIdx.find(make_tuple(t.GetSenderAddr(), t.GetNonce()));
-        if (it != compIdx.end())
+        auto& senderNonceIdx
+            = m_createdTransactions.get<MULTI_INDEX_KEY::SENDER_NONCE>();
+        auto it = senderNonceIdx.find(t.GetSenderNonceHash());
+        if (it != senderNonceIdx.end())
         {
             if (it->GetGasPrice() > t.GetGasPrice())
             {
                 t = std::move(*it);
-                compIdx.erase(it);
+                senderNonceIdx.erase(it);
             }
         }
     };
@@ -811,15 +811,15 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes,
 
     auto findSameNonceButHigherGasPrice
         = [&t_createdTransactions](Transaction& t) -> void {
-        auto& compIdx
-            = t_createdTransactions.get<MULTI_INDEX_KEY::ADDR_NONCE>();
-        auto it = compIdx.find(make_tuple(t.GetSenderAddr(), t.GetNonce()));
-        if (it != compIdx.end())
+        auto& senderNonceIdx
+            = t_createdTransactions.get<MULTI_INDEX_KEY::SENDER_NONCE>();
+        auto it = senderNonceIdx.find(t.GetSenderNonceHash());
+        if (it != senderNonceIdx.end())
         {
             if (it->GetGasPrice() > t.GetGasPrice())
             {
                 t = std::move(*it);
-                compIdx.erase(it);
+                senderNonceIdx.erase(it);
             }
         }
     };

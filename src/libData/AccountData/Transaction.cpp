@@ -85,6 +85,7 @@ Transaction::Transaction(const Transaction& src)
     , m_data(src.m_data)
     , m_signature(src.m_signature)
 {
+    SetSenderNonceHash();
 }
 
 Transaction::Transaction(const vector<unsigned char>& src, unsigned int offset)
@@ -129,6 +130,8 @@ Transaction::Transaction(uint256_t version, const uint256_t& nonce,
     {
         LOG_GENERAL(WARNING, "We failed to generate m_signature.");
     }
+
+    SetSenderNonceHash();
 }
 
 Transaction::Transaction(uint256_t version, const uint256_t& nonce,
@@ -169,6 +172,8 @@ Transaction::Transaction(uint256_t version, const uint256_t& nonce,
     {
         LOG_GENERAL(WARNING, "We failed to verify the input signature.");
     }
+
+    SetSenderNonceHash();
 }
 
 unsigned int Transaction::Serialize(vector<unsigned char>& dst,
@@ -252,10 +257,40 @@ int Transaction::Deserialize(const vector<unsigned char>& src,
                     "Error with Transaction::Deserialize." << ' ' << e.what());
         return -1;
     }
+
+    SetSenderNonceHash();
+
     return 0;
 }
 
 const TxnHash& Transaction::GetTranID() const { return m_tranID; }
+
+const TxnHash& Transaction::GetSenderNonceHash() const
+{
+    return m_senderNonceHash;
+}
+
+void Transaction::SetSenderNonceHash()
+{
+#ifndef IS_LOOKUP_NODE
+    vector<unsigned char> vec;
+    m_senderPubKey.Serialize(vec, 0);
+    SetNumber<uint256_t>(vec, PUB_KEY_SIZE, m_nonce, UINT256_SIZE);
+    SHA2<HASH_TYPE::HASH_VARIANT_256> sha2;
+    sha2.Update(vec);
+
+    const vector<unsigned char>& output = sha2.Finalize();
+
+    if (output.size() != 32)
+    {
+        LOG_GENERAL(WARNING,
+                    "assertion failed (" << __FILE__ << ":" << __LINE__ << ": "
+                                         << __FUNCTION__ << ")");
+    }
+
+    copy(output.begin(), output.end(), m_senderNonceHash.asArray().begin());
+#endif // IS_LOOKUP_NODE
+}
 
 const uint256_t& Transaction::GetVersion() const { return m_version; }
 

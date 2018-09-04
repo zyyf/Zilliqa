@@ -542,14 +542,14 @@ bool Node::ProcessCreateTransactionFromLookup(
     if (m_mediator.m_validator->CheckCreatedTransactionFromLookup(tx))
     {
         lock_guard<mutex> g(m_mutexCreatedTransactions);
-        auto& compIdx
-            = m_createdTransactions.get<MULTI_INDEX_KEY::ADDR_NONCE>();
-        auto it = compIdx.find(make_tuple(tx.GetSenderAddr(), tx.GetNonce()));
-        if (it != compIdx.end())
+        auto& senderNonceIdx
+            = m_createdTransactions.get<MULTI_INDEX_KEY::SENDER_NONCE>();
+        auto it = senderNonceIdx.find(tx.GetSenderNonceHash());
+        if (it != senderNonceIdx.end())
         {
             if (it->GetGasPrice() < tx.GetGasPrice())
             {
-                compIdx.replace(it, tx);
+                senderNonceIdx.replace(it, tx);
                 return true;
             }
             else
@@ -560,7 +560,7 @@ bool Node::ProcessCreateTransactionFromLookup(
                 return false;
             }
         }
-        compIdx.insert(tx);
+        senderNonceIdx.insert(tx);
     }
     else
     {
@@ -680,10 +680,10 @@ bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
     {
         LOG_GENERAL(INFO, "Start check txn packet from lookup");
         lock_guard<mutex> g(m_mutexCreatedTransactions);
-        auto& compIdx
-            = m_createdTransactions.get<MULTI_INDEX_KEY::ADDR_NONCE>();
-        LOG_GENERAL(INFO,
-                    "MultiIndexContainer size before: " << compIdx.size());
+        auto& senderNonceIdx
+            = m_createdTransactions.get<MULTI_INDEX_KEY::SENDER_NONCE>();
+        LOG_GENERAL(
+            INFO, "MultiIndexContainer size before: " << senderNonceIdx.size());
         for (unsigned int i = 0; i < num; i++)
         {
             Transaction tx;
@@ -695,18 +695,17 @@ bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
 
             if (m_mediator.m_validator->CheckCreatedTransactionFromLookup(tx))
             {
-                auto it = compIdx.find(
-                    make_tuple(tx.GetSenderAddr(), tx.GetNonce()));
-                if (it != compIdx.end())
+                auto it = senderNonceIdx.find(tx.GetSenderNonceHash());
+                if (it != senderNonceIdx.end())
                 {
                     if (it->GetGasPrice() < tx.GetGasPrice())
                     {
-                        compIdx.replace(it, tx);
+                        senderNonceIdx.replace(it, tx);
                     }
                 }
                 else
                 {
-                    compIdx.insert(tx);
+                    senderNonceIdx.insert(tx);
                     txn_sent_count++;
                 }
             }
@@ -722,7 +721,8 @@ bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
 
             curr_offset += tx.GetSerializedSize();
         }
-        LOG_GENERAL(INFO, "MultiIndexContainer size after: " << compIdx.size());
+        LOG_GENERAL(
+            INFO, "MultiIndexContainer size after: " << senderNonceIdx.size());
     }
     LOG_GENERAL(INFO, "TXN COUNT" << txn_sent_count);
 
