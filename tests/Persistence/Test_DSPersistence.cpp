@@ -34,6 +34,10 @@
 using namespace std;
 using namespace boost::multiprecision;
 
+// TODO: This test suite is disabled due to the following error encountered. Will need to be reenable back at a later time
+// unknown location:0: fatal error: in "persistencetest/testRetrieveAllTheDSBlocksInDB": memory access violation at address: 0x00000008: no mapping at fault address
+// /Users/travis/build/Zilliqa/Zilliqa/tests/Persistence/Test_DSPersistence.cpp:412:
+
 BOOST_AUTO_TEST_SUITE(persistencetest)
 
 BOOST_AUTO_TEST_CASE(testReadWriteSimpleStringToDB) {
