@@ -1534,6 +1534,258 @@ bool Messenger::GetTxSharingAssignmentsHash(
   return true;
 }
 
+bool Messenger::SetAccount(vector<unsigned char>& dst,
+                           const unsigned int offset, const Account& account) {
+  ProtoAccount result;
+
+  NumberToProtobufByteArray<uint256_t, UINT256_SIZE>(account.GetBalance(),
+                                                     *result.mutable_balance());
+  NumberToProtobufByteArray<uint256_t, UINT256_SIZE>(account.GetNonce(),
+                                                     *result.mutable_nonce());
+  result.set_storageroot(account.GetStorageRoot().data(),
+                         account.GetStorageRoot().size);
+
+  if (account.GetCode().size() > 0) {
+    result.set_codehash(account.GetCodeHash().data(),
+                        account.GetCodeHash().size);
+    result.set_createblocknum(account.GetCreateBlockNum());
+    result.set_initdata(account.GetInitData().data(),
+                        account.GetInitData().size());
+    result.set_code(account.GetCode().data(), account.GetCode().size());
+
+    for (const auto& keyHash : account.GetStorageKeyHashes()) {
+      ProtoAccount::StorageData* entry = result.add_storage();
+      entry->set_keyhash(keyHash.data(), keyHash.size);
+      entry->set_data(account.GetRawStorage(keyHash));
+    }
+  }
+
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "ProtoAccount initialization failed.");
+    return false;
+  }
+
+  return SerializeToArray(result, dst, offset);
+}
+
+bool Messenger::GetAccount(const vector<unsigned char>& src,
+                           const unsigned int offset, Account& account) {
+  ProtoAccount result;
+
+  result.ParseFromArray(src.data() + offset, src.size() - offset);
+
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "ProtoAccount initialization failed.");
+    return false;
+  }
+
+  uint256_t tmpNumber;
+
+  ProtobufByteArrayToNumber<uint256_t, UINT256_SIZE>(result.balance(),
+                                                     tmpNumber);
+  account.SetBalance(tmpNumber);
+
+  ProtobufByteArrayToNumber<uint256_t, UINT256_SIZE>(result.nonce(), tmpNumber);
+  account.SetNonce(tmpNumber);
+
+  dev::h256 tmpStorageRoot;
+  copy(result.storageroot().begin(),
+       result.storageroot().begin() +
+           min((unsigned int)result.storageroot().size(),
+               (unsigned int)tmpStorageRoot.size),
+       tmpStorageRoot.asArray().begin());
+
+  if (result.code().size() > 0) {
+    vector<unsigned char> tmpVec;
+    tmpVec.resize(result.code().size());
+    copy(result.code().begin(), result.code().end(), tmpVec.begin());
+    account.SetCode(tmpVec);
+
+    dev::h256 tmpHash;
+    copy(result.codehash().begin(),
+         result.codehash().begin() + min((unsigned int)result.codehash().size(),
+                                         (unsigned int)tmpHash.size),
+         tmpHash.asArray().begin());
+
+    if (account.GetCodeHash() != tmpHash) {
+      LOG_GENERAL(WARNING,
+                  "Code hash mismatch. Expected: "
+                      << DataConversion::charArrToHexStr(
+                             account.GetCodeHash().asArray())
+                      << " Actual: "
+                      << DataConversion::charArrToHexStr(tmpHash.asArray()));
+      return false;
+    }
+
+    account.SetCreateBlockNum(result.createblocknum());
+
+    if (result.initdata().size() > 0) {
+      tmpVec.resize(result.initdata().size());
+      copy(result.initdata().begin(), result.initdata().end(), tmpVec.begin());
+      account.InitContract(tmpVec);
+    }
+
+    for (const auto& entry : result.storage()) {
+      copy(entry.keyhash().begin(),
+           entry.keyhash().begin() + min((unsigned int)entry.keyhash().size(),
+                                         (unsigned int)tmpHash.size),
+           tmpHash.asArray().begin());
+      account.SetStorage(tmpHash, entry.data());
+    }
+
+    if (account.GetStorageRoot() != tmpStorageRoot) {
+      LOG_GENERAL(WARNING, "Storage root mismatch. Expected: "
+                               << DataConversion::charArrToHexStr(
+                                      account.GetStorageRoot().asArray())
+                               << " Actual: "
+                               << DataConversion::charArrToHexStr(
+                                      tmpStorageRoot.asArray()));
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool Messenger::SetAccountDelta(vector<unsigned char>& dst,
+                                const unsigned int offset, Account* oldAccount,
+                                const Account& newAccount) {
+  ProtoAccount result;
+
+  Account acc(0, 0);
+
+  bool fullCopy = false;
+
+  if (oldAccount == nullptr) {
+    oldAccount = &acc;
+    fullCopy = true;
+  }
+
+  int256_t balanceDelta =
+      int256_t(newAccount.GetBalance()) - int256_t(oldAccount->GetBalance());
+  result.set_numbersign(balanceDelta > 0);
+
+  uint256_t balanceDeltaNum(abs(balanceDelta));
+  NumberToProtobufByteArray<uint256_t, UINT256_SIZE>(balanceDeltaNum,
+                                                     *result.mutable_balance());
+
+  uint256_t nonceDelta = newAccount.GetNonce() - oldAccount->GetNonce();
+  NumberToProtobufByteArray<uint256_t, UINT256_SIZE>(nonceDelta,
+                                                     *result.mutable_nonce());
+
+  if (!newAccount.GetCode().empty()) {
+    if (fullCopy) {
+      result.set_code(newAccount.GetCode().data(), newAccount.GetCode().size());
+      result.set_initdata(newAccount.GetInitData().data(),
+                          newAccount.GetInitData().size());
+      result.set_createblocknum(newAccount.GetCreateBlockNum());
+    }
+
+    if (newAccount.GetStorageRoot() != oldAccount->GetStorageRoot()) {
+      result.set_storageroot(newAccount.GetStorageRoot().data(),
+                             newAccount.GetStorageRoot().size);
+
+      for (const auto& keyHash : newAccount.GetStorageKeyHashes()) {
+        string rlpStr = newAccount.GetRawStorage(keyHash);
+        if (rlpStr != oldAccount->GetRawStorage(keyHash)) {
+          ProtoAccount::StorageData* entry = result.add_storage();
+          entry->set_keyhash(keyHash.data(), keyHash.size);
+          entry->set_data(rlpStr);
+        }
+      }
+    }
+  }
+
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "ProtoAccount initialization failed.");
+    return false;
+  }
+
+  return SerializeToArray(result, dst, offset);
+}
+
+bool Messenger::GetAccountDelta(const vector<unsigned char>& src,
+                                const unsigned int offset, Account& account,
+                                bool fullCopy) {
+  ProtoAccount result;
+
+  result.ParseFromArray(src.data() + offset, src.size() - offset);
+
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "ProtoAccount initialization failed.");
+    return false;
+  }
+
+  uint256_t tmpNumber;
+
+  ProtobufByteArrayToNumber<uint256_t, UINT256_SIZE>(result.balance(),
+                                                     tmpNumber);
+
+  int balanceDelta = result.numbersign() ? (int)tmpNumber : 0 - (int)tmpNumber;
+  account.ChangeBalance(balanceDelta);
+
+  ProtobufByteArrayToNumber<uint256_t, UINT256_SIZE>(result.nonce(), tmpNumber);
+  account.IncreaseNonceBy(tmpNumber);
+
+  if (result.code().size() > 0) {
+    bool doInitContract = false;
+
+    if (fullCopy) {
+      vector<unsigned char> tmpVec;
+      tmpVec.resize(result.code().size());
+      copy(result.code().begin(), result.code().end(), tmpVec.begin());
+      if (tmpVec != account.GetCode()) {
+        account.SetCode(tmpVec);
+      }
+
+      if (!result.initdata().empty() && account.GetInitData().empty()) {
+        tmpVec.resize(result.initdata().size());
+        copy(result.initdata().begin(), result.initdata().end(),
+             tmpVec.begin());
+        account.SetInitData(tmpVec);
+        doInitContract = true;
+      }
+
+      account.SetCreateBlockNum(result.createblocknum());
+    }
+
+    dev::h256 tmpStorageRoot;
+    copy(result.storageroot().begin(),
+         result.storageroot().begin() +
+             min((unsigned int)result.storageroot().size(),
+                 (unsigned int)tmpStorageRoot.size),
+         tmpStorageRoot.asArray().begin());
+
+    if (tmpStorageRoot != account.GetStorageRoot()) {
+      if (doInitContract) {
+        account.InitContract();
+      }
+
+      dev::h256 tmpHash;
+
+      for (const auto& entry : result.storage()) {
+        copy(entry.keyhash().begin(),
+             entry.keyhash().begin() + min((unsigned int)entry.keyhash().size(),
+                                           (unsigned int)tmpHash.size),
+             tmpHash.asArray().begin());
+        account.SetStorage(tmpHash, entry.data());
+      }
+
+      if (tmpStorageRoot != account.GetStorageRoot()) {
+        LOG_GENERAL(WARNING, "Storage root mismatch. Expected: "
+                                 << DataConversion::charArrToHexStr(
+                                        account.GetStorageRoot().asArray())
+                                 << " Actual: "
+                                 << DataConversion::charArrToHexStr(
+                                        tmpStorageRoot.asArray()));
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 bool Messenger::SetDSBlockHeader(vector<unsigned char>& dst,
                                  const unsigned int offset,
                                  const DSBlockHeader& dsBlockHeader) {

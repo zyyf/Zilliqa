@@ -46,6 +46,18 @@ class Messenger {
       const std::vector<std::vector<Peer>>& shardReceivers,
       const std::vector<std::vector<Peer>>& shardSenders, TxSharingHash& dst);
 
+  static bool SetAccount(std::vector<unsigned char>& dst,
+                         const unsigned int offset, const Account& account);
+  static bool GetAccount(const std::vector<unsigned char>& src,
+                         const unsigned int offset, Account& account);
+
+  static bool SetAccountDelta(std::vector<unsigned char>& dst,
+                              const unsigned int offset, Account* oldAccount,
+                              const Account& newAccount);
+  static bool GetAccountDelta(const std::vector<unsigned char>& src,
+                              const unsigned int offset, Account& account,
+                              bool fullCopy);
+
   static bool SetDSBlockHeader(std::vector<unsigned char>& dst,
                                const unsigned int offset,
                                const DSBlockHeader& dsBlockHeader);

@@ -102,8 +102,7 @@ int AccountStoreBase<MAP>::Deserialize(const std::vector<unsigned char>& src,
       curOffset += ACC_ADDR_SIZE;
 
       // Deserialize account
-      // account.Deserialize(src, curOffset);
-      if (account.DeserializeAddOffset(src, curOffset) < 0) {
+      if (!account.Deserialize(src, curOffset)) {
         LOG_GENERAL(WARNING, "We failed to init account.");
         return -1;
       }

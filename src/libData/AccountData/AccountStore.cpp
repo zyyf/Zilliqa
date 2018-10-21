@@ -85,7 +85,7 @@ int AccountStore::Deserialize(const vector<unsigned char>& src,
       curOffset += ACC_ADDR_SIZE;
 
       // Deserialize account
-      if (account.DeserializeAddOffset(src, curOffset) < 0) {
+      if (!account.Deserialize(src, curOffset)) {
         LOG_GENERAL(WARNING, "failed to deserialize account: " << address);
         continue;
       }
