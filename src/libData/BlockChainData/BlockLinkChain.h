@@ -57,22 +57,20 @@ class BlockLinkChain {
 
   BlockLinkChain() { Reset(); };
 
-  BlockLink GetBlockLink(const uint64_t& blocknum) {
+  BlockLink GetBlockLink(const uint64_t& index) {
     std::lock_guard<std::mutex> g(m_mutexBlockLinkChain);
-    if (m_blockLinkChain.size() <= blocknum) {
-      LOG_GENERAL(WARNING, "Unable to find blocklink, returning dummy link "
-                               << blocknum);
+    if (m_blockLinkChain.size() <= index) {
+      LOG_GENERAL(WARNING,
+                  "Unable to find blocklink, returning dummy link " << index);
       return BlockLink();
-    } else if (blocknum + m_blockLinkChain.capacity() <
-               m_blockLinkChain.size()) {
-      return GetFromPersistentStorage(blocknum);
+    } else if (index + m_blockLinkChain.capacity() < m_blockLinkChain.size()) {
+      return GetFromPersistentStorage(index);
     }
-    if (std::get<BlockLinkIndex::INDEX>(m_blockLinkChain[blocknum]) !=
-        blocknum) {
-      LOG_GENERAL(WARNING, "Does not match the given blocknum");
+    if (std::get<BlockLinkIndex::INDEX>(m_blockLinkChain[index]) != index) {
+      LOG_GENERAL(WARNING, "Does not match the given index");
       return BlockLink();
     }
-    return m_blockLinkChain[blocknum];
+    return m_blockLinkChain[index];
   }
 
   void AddBlockLink(const uint64_t& index, const uint64_t& dsindex,
