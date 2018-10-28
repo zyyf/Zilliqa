@@ -34,6 +34,7 @@ class Retriever {
 
   void RetrieveDSBlocks(bool& result);
   void RetrieveTxBlocks(bool& result);
+  void RetrieveBlockLink(bool& result);
   bool RetrieveStates();
   bool ValidateStates();
   bool CleanExtraTxBodies();

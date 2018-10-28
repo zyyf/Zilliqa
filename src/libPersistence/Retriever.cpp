@@ -119,6 +119,62 @@ void Retriever::RetrieveTxBlocks(bool& result) {
   result = true;
 }
 
+void Retriever::RetrieveBlockLink(bool& result)
+{
+  std::list<BlockLink> blocklinks;
+  if(!BlockStorage::GetBlockStorage().GetAllBlockLink(blocklinks))
+  {
+    result = false;
+    return;
+  }
+  blocklinks.sort([](const BlockLink& a, const BlockLink& b)
+  {
+    return std::get<BlockLinkIndex::INDEX>(a) < std::get<BlockLinkIndex::INDEX>(b);
+  });
+
+  for(const auto& blocklink : blocklinks)
+  {
+    m_mediator.m_blocklinkchain.AddBlockLink(blocklink);
+
+    if(std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) == BlockType::DS)
+    {
+      const auto& dsBlock = m_mediator.m_dsBlockChain.GetBlock(std::get<BlockLinkIndex::DSINDEX>(blocklink));
+      if(dsBlock == DSBlock())
+      {
+        LOG_GENERAL(WARNING,"Could not find ds block num "<<std::get<BlockLinkIndex::DSINDEX>(blocklink));
+        result = false;
+        return;
+      }
+
+    }
+    else if (std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) == BlockType::VC)
+    {
+      VCBlockSharedPtr vcblock;
+
+      if(!BlockStorage::GetBlockStorage().GetVCBlock(std::get<BlockLinkIndex::BLOCKHASH>(blocklink),vcblock))
+      {
+        LOG_GENERAL(WARNING,"Could not find vc with blockHash "<<std::get<BlockLinkIndex::BLOCKHASH>(blocklink));
+        result = false;
+        return;
+      }
+    }
+    else if(std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) == BlockType::FB)
+    {
+      FallbackBlockSharedPtr fallbackwshardingstruct;
+      if(!BlockStorage::GetBlockStorage().GetFallbackBlock(std::get<BlockLinkIndex::BLOCKHASH>(blocklink),fallbackwshardingstruct))
+      {
+        LOG_GENERAL(WARNING,"Could not find vc with blockHash "<<std::get<BlockLinkIndex::BLOCKHASH>(blocklink));
+        result = false;
+        return;
+      }
+    }
+
+  }
+
+  result = true;
+}
+
+
 bool Retriever::CleanExtraTxBodies() {
   if (!LOOKUP_NODE_MODE) {
     LOG_GENERAL(WARNING,

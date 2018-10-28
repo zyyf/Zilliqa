@@ -77,17 +77,27 @@ class BlockLinkChain {
 
   void AddBlockLink(const uint64_t& index, const uint64_t& dsindex,
                     const BlockType blocktype, const BlockHash& blockhash) {
-    std::lock_guard<std::mutex> g(m_mutexBlockLinkChain);
-    m_blockLinkChain.insert_new(
-        index, std::make_tuple(index, dsindex, blocktype, blockhash));
+    
+    AddBlockLink(std::make_tuple(index, dsindex, blocktype, blockhash));
 
-    std::vector<unsigned char> dst;
     LOG_GENERAL(INFO, "[DBS]"
                           << "Stored " << index << " " << dsindex << " "
                           << blocktype << " " << blockhash);
+  }
+
+  void AddBlockLink(const BlockLink& blcklink)
+  {
+    const uint64_t& index = std::get<BlockLinkIndex::INDEX>(blcklink);
+
+    std::lock_guard<std::mutex> g(m_mutexBlockLinkChain);
+    m_blockLinkChain.insert_new(
+        index, blcklink);
+
+
+    std::vector<unsigned char> dst;
 
     if (!Messenger::SetBlockLink(
-            dst, 0, std::make_tuple(index, dsindex, blocktype, blockhash))) {
+            dst, 0, blcklink)) {
       LOG_GENERAL(WARNING, "Could not set BlockLink " << index);
       return;
     }
