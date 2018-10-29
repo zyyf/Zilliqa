@@ -450,7 +450,7 @@ bool ConsensusLeader::GenerateChallengeMessage(vector<unsigned char>& challenge,
 bool ConsensusLeader::ProcessMessageResponseCore(
     const vector<unsigned char>& response, unsigned int offset, Action action,
     ConsensusMessageType returnmsgtype, State nextstate) {
-  LOG_MARKER();
+  // LOG_MARKER();
   // Initial checks
   // ==============
 
@@ -655,7 +655,7 @@ bool ConsensusLeader::ProcessMessageResponseCore(
 
 bool ConsensusLeader::ProcessMessageResponse(
     const vector<unsigned char>& response, unsigned int offset) {
-  LOG_MARKER();
+  // LOG_MARKER();
   return ProcessMessageResponseCore(response, offset, PROCESS_RESPONSE,
                                     COLLECTIVESIG, COLLECTIVESIG_DONE);
 }

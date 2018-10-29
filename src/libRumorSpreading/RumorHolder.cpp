@@ -258,11 +258,11 @@ std::pair<std::vector<int>, std::vector<Message>> RumorHolder::advanceRound() {
   }
   // if still no enough neighbors, try to add from nonPriorPeers list
   if (neighborC < m_maxNeighborsPerRound) {
-    LOG_GENERAL(INFO, "Got " << neighborC << " neighbors. Expected: "
-                             << m_maxNeighborsPerRound);
-    LOG_GENERAL(WARNING,
-                "Didn't find enough neighbors from priority peer list. "
-                "Will try selecting from NonPriority peer list");
+    // LOG_GENERAL(INFO, "Got " << neighborC << " neighbors. Expected: "
+    //                          << m_maxNeighborsPerRound);
+    // LOG_GENERAL(WARNING,
+    //             "Didn't find enough neighbors from priority peer list. "
+    //             "Will try selecting from NonPriority peer list");
     for (const auto& i : m_nonPriorityPeers) {
       if (neighborC < m_maxNeighborsPerRound) {
         toMembers.push_back(i);
@@ -271,13 +271,13 @@ std::pair<std::vector<int>, std::vector<Message>> RumorHolder::advanceRound() {
         break;
       }
     }
-    if (neighborC == m_maxNeighborsPerRound) {
-      LOG_GENERAL(INFO, "Finally got enough neighbors");
-    } else {
-      LOG_GENERAL(INFO,
-                  "Didn't found enough neighbors. Will send gossip "
-                  "to those we found.");
-    }
+    // if (neighborC == m_maxNeighborsPerRound) {
+    //   LOG_GENERAL(INFO, "Finally got enough neighbors");
+    // } else {
+    //   LOG_GENERAL(INFO,
+    //               "Didn't found enough neighbors. Will send gossip "
+    //               "to those we found.");
+    // }
   }
   m_nonPriorityPeers.clear();
 

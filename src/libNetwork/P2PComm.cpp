@@ -557,8 +557,8 @@ void P2PComm::EventCallback(struct bufferevent* bev, short events,
 
     P2PComm& p2p = P2PComm::GetInstance();
     if (gossipMsgTyp == (uint8_t)RRS::Message::Type::FORWARD) {
-      LOG_GENERAL(INFO,
-                  "Received Gossip of type - FORWARD from Peer :" << from);
+      // LOG_GENERAL(INFO,
+      //             "Received Gossip of type - FORWARD from Peer :" << from);
 
       if (p2p.SpreadRumor(rumor_message)) {
         std::pair<vector<unsigned char>, Peer>* raw_message =
@@ -841,27 +841,27 @@ void P2PComm::SendMessageNoQueue(const Peer& peer,
 }
 
 bool P2PComm::SpreadRumor(const std::vector<unsigned char>& message) {
-  LOG_MARKER();
+  // LOG_MARKER();
   return m_rumorManager.AddRumor(message);
 }
 
 void P2PComm::SendRumorToForeignPeer(
     const Peer& foreignPeer, const std::vector<unsigned char>& message) {
-  LOG_MARKER();
+  // LOG_MARKER();
   m_rumorManager.SendRumorToForeignPeer(foreignPeer, message);
 }
 
 void P2PComm::SendRumorToForeignPeers(
     const std::vector<Peer>& foreignPeers,
     const std::vector<unsigned char>& message) {
-  LOG_MARKER();
+  // LOG_MARKER();
   m_rumorManager.SendRumorToForeignPeers(foreignPeers, message);
 }
 
 void P2PComm::SendRumorToForeignPeers(
     const std::deque<Peer>& foreignPeers,
     const std::vector<unsigned char>& message) {
-  LOG_MARKER();
+  // LOG_MARKER();
   m_rumorManager.SendRumorToForeignPeers(foreignPeers, message);
 }
 
