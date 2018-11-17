@@ -3051,7 +3051,7 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
   static unsigned int s = 0;
 
   std::vector<int> txns = {30, 180, 360, 1500, 3000, 6000, 12000};
-  for (unsigned int m = 0; m < txns.size(); m++) {
+  for (auto transactionNumber : txns) {
     map<uint32_t, vector<Transaction>> mp;
 
     /*    if (!GenTxnToSend(txns[i], mp, numShards)) {
@@ -3067,11 +3067,10 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
       {
         lock_guard<mutex> g(m_txnShardMapMutex);
         // auto transactionNumber = mp[i].size();
-        auto transactionNumber = txns[m];
 
         // dummy
         int k = 0;
-        while (k < txns[m]) {
+        while (k < transactionNumber) {
           mp[i].emplace_back(Transaction());
           k++;
         }
