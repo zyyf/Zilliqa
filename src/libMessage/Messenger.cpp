@@ -3490,8 +3490,9 @@ bool Messenger::GetNodeForwardTxnBlock(const std::vector<unsigned char>& src,
 
   epochNumber = result.epochnumber();
   shardId = result.shardid();
+  txns.clear();
   ProtobufByteArrayToSerializable(result.pubkey(), lookupPubKey);
-
+  /*
   if (result.transactions().size() > 0) {
     std::vector<unsigned char> tmp;
     if (!RepeatableToArray(result.transactions(), tmp, 0)) {
@@ -3512,7 +3513,7 @@ bool Messenger::GetNodeForwardTxnBlock(const std::vector<unsigned char>& src,
       txns.emplace_back(t);
     }
   }
-
+  */
   LOG_GENERAL(INFO, "Epoch: " << epochNumber << " Shard: " << shardId
                               << " Received txns: " << txns.size());
 

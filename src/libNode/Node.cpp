@@ -882,13 +882,13 @@ bool Node::ProcessTxnPacketFromLookup(
     return false;
   }
 
-  if (!Lookup::VerifyLookupNode(m_mediator.m_lookup->GetLookupNodes(),
+  /*if (!Lookup::VerifyLookupNode(m_mediator.m_lookup->GetLookupNodes(),
                                 lookupPubKey)) {
     LOG_EPOCH(WARNING, std::to_string(m_mediator.m_currentEpochNum).c_str(),
               "The message sender pubkey: "
                   << lookupPubKey << " is not in my lookup node list.");
     return false;
-  }
+  }*/
 
   {
     // The check here is in case the lookup send the packet
@@ -931,9 +931,9 @@ bool Node::ProcessTxnPacketFromLookup(
   return true;
 }
 
-bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
-                                          const uint32_t shardId,
-                                          const vector<Transaction>& txns) {
+bool Node::ProcessTxnPacketFromLookupCore(
+    const vector<unsigned char>& message, const uint32_t shardId,
+    [[gnu::unused]] const vector<Transaction>& txns) {
   LOG_MARKER();
 
   if (LOOKUP_NODE_MODE) {
@@ -1008,7 +1008,7 @@ bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
 
   // Process the txns
   unsigned int processed_count = 0;
-
+  /*
   LOG_GENERAL(INFO, "Start check txn packet from lookup");
 
   std::vector<Transaction> checkedTxns;
@@ -1036,7 +1036,7 @@ bool Node::ProcessTxnPacketFromLookupCore(const vector<unsigned char>& message,
   LOG_GENERAL(INFO, "Txn processed: " << processed_count
                                       << " TxnPool size after processing: "
                                       << m_createdTxns.size());
-
+*/
   LOG_STATE(
       "[TXNPKTPROC]["
       << std::setw(15) << std::left

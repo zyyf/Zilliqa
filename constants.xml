@@ -1,29 +1,27 @@
-<?xml version="1.0"?>
-<!-- format guideline: non-tab four-space indentation -->
 <node>
     <constants>
         <MSG_VERSION>1</MSG_VERSION>
         <DS_MULTICAST_CLUSTER_SIZE>10</DS_MULTICAST_CLUSTER_SIZE>
         <TX_SHARING_CLUSTER_SIZE>10</TX_SHARING_CLUSTER_SIZE>
-        <!-- Shard size will be automatically calculated if COMM_SIZE = 0 -->
-        <COMM_SIZE>200</COMM_SIZE>
+        
+        <COMM_SIZE>0</COMM_SIZE>
         <NUM_DS_ELECTION>5</NUM_DS_ELECTION>
-        <POW_WINDOW_IN_SECONDS>300</POW_WINDOW_IN_SECONDS>
+        <POW_WINDOW_IN_SECONDS>150</POW_WINDOW_IN_SECONDS>
         <NEW_NODE_SYNC_INTERVAL>80</NEW_NODE_SYNC_INTERVAL>
         <RECOVERY_SYNC_TIMEOUT>5</RECOVERY_SYNC_TIMEOUT>
-        <POW_SUBMISSION_TIMEOUT>500</POW_SUBMISSION_TIMEOUT>
+        <POW_SUBMISSION_TIMEOUT>150</POW_SUBMISSION_TIMEOUT>
         <DS_POW_DIFFICULTY>5</DS_POW_DIFFICULTY>
         <POW_DIFFICULTY>3</POW_DIFFICULTY>
         <POW_SUBMISSION_LIMIT>2</POW_SUBMISSION_LIMIT>
-        <MICROBLOCK_TIMEOUT>180</MICROBLOCK_TIMEOUT>
-        <VIEWCHANGE_TIME>600</VIEWCHANGE_TIME>
+        <MICROBLOCK_TIMEOUT>300</MICROBLOCK_TIMEOUT>
+        <VIEWCHANGE_TIME>480</VIEWCHANGE_TIME>
         <VIEWCHANGE_PRECHECK_TIME>10</VIEWCHANGE_PRECHECK_TIME>
         <VIEWCHANGE_EXTRA_TIME>15</VIEWCHANGE_EXTRA_TIME>
         <CONSENSUS_MSG_ORDER_BLOCK_WINDOW>10</CONSENSUS_MSG_ORDER_BLOCK_WINDOW>
-        <CONSENSUS_OBJECT_TIMEOUT>10</CONSENSUS_OBJECT_TIMEOUT>
+        <CONSENSUS_OBJECT_TIMEOUT>20</CONSENSUS_OBJECT_TIMEOUT>
         <FETCHING_MISSING_DATA_TIMEOUT>10</FETCHING_MISSING_DATA_TIMEOUT>
         <DS_MICROBLOCK_CONSENSUS_OBJECT_TIMEOUT>30</DS_MICROBLOCK_CONSENSUS_OBJECT_TIMEOUT>
-        <NUM_FINAL_BLOCK_PER_POW>50</NUM_FINAL_BLOCK_PER_POW>
+        <NUM_FINAL_BLOCK_PER_POW>11</NUM_FINAL_BLOCK_PER_POW>
         <MAXMESSAGE>800</MAXMESSAGE>
         <NEW_NODE_POW_DELAY>10</NEW_NODE_POW_DELAY>
         <POST_VIEWCHANGE_BUFFER>10</POST_VIEWCHANGE_BUFFER>
@@ -31,41 +29,41 @@
         <DEBUG_LEVEL>3</DEBUG_LEVEL>
         <BROADCAST_INTERVAL>60</BROADCAST_INTERVAL>
         <BROADCAST_EXPIRY>600</BROADCAST_EXPIRY>
-        <TX_DISTRIBUTE_TIME_IN_MS>15000</TX_DISTRIBUTE_TIME_IN_MS>
+        <TX_DISTRIBUTE_TIME_IN_MS>110000</TX_DISTRIBUTE_TIME_IN_MS>
         <FINALBLOCK_DELAY_IN_MS>3000</FINALBLOCK_DELAY_IN_MS>
-        <NUM_NODES_TO_SEND_LOOKUP>3</NUM_NODES_TO_SEND_LOOKUP>
-        <NUM_TXN_TO_SEND_PER_ACCOUNT>100</NUM_TXN_TO_SEND_PER_ACCOUNT>
+        <NUM_NODES_TO_SEND_LOOKUP>1</NUM_NODES_TO_SEND_LOOKUP>
+        <NUM_TXN_TO_SEND_PER_ACCOUNT>5</NUM_TXN_TO_SEND_PER_ACCOUNT>
         <MAX_INDEXES_PER_TXN>3</MAX_INDEXES_PER_TXN>
-        <SENDQUEUE_SIZE>128</SENDQUEUE_SIZE>
-        <MSGQUEUE_SIZE>128</MSGQUEUE_SIZE>
+        <SENDQUEUE_SIZE>256</SENDQUEUE_SIZE>
+        <MSGQUEUE_SIZE>256</MSGQUEUE_SIZE>
         <POW_CHANGE_PERCENT_TO_ADJ_DIFF>12</POW_CHANGE_PERCENT_TO_ADJ_DIFF>
         <FALLBACK_INTERVAL_STARTED>60</FALLBACK_INTERVAL_STARTED>
         <FALLBACK_INTERVAL_WAITING>3600</FALLBACK_INTERVAL_WAITING>
         <FALLBACK_CHECK_INTERVAL>5</FALLBACK_CHECK_INTERVAL>
         <FALLBACK_EXTRA_TIME>10</FALLBACK_EXTRA_TIME>
         <NUM_MICROBLOCK_SENDERS>5</NUM_MICROBLOCK_SENDERS>
-        <!-- Below custom settings will be used if GOSSIP_CUSTOM_ROUNDS_SETTINGS is enabled-->
+        
         <MAX_ROUNDS_IN_BSTATE>2</MAX_ROUNDS_IN_BSTATE>
         <MAX_ROUNDS_IN_CSTATE>3</MAX_ROUNDS_IN_CSTATE>
         <MAX_TOTAL_ROUNDS>6</MAX_TOTAL_ROUNDS>
-        <!-- End of custom settings -->
+        
         <MAX_NEIGHBORS_PER_ROUND>10</MAX_NEIGHBORS_PER_ROUND>
-        <ROUND_TIME_IN_MS>100</ROUND_TIME_IN_MS>
+        <ROUND_TIME_IN_MS>1000</ROUND_TIME_IN_MS>
         <NUM_MICROBLOCK_GOSSIP_RECEIVERS>10</NUM_MICROBLOCK_GOSSIP_RECEIVERS>
         <NUM_FINALBLOCK_GOSSIP_RECEIVERS_PER_SHARD>10</NUM_FINALBLOCK_GOSSIP_RECEIVERS_PER_SHARD>
         <NUM_NODE_INCR_DIFFICULTY>5000</NUM_NODE_INCR_DIFFICULTY>
         <MAX_SHARD_NODE_NUM>7500</MAX_SHARD_NODE_NUM>
         <HEARTBEAT_INTERVAL_IN_SECONDS>10</HEARTBEAT_INTERVAL_IN_SECONDS>
-        <TERMINATION_COUNTDOWN_IN_SECONDS>5</TERMINATION_COUNTDOWN_IN_SECONDS>
-        <DS_DELAY_WAKEUP_IN_SECONDS>20</DS_DELAY_WAKEUP_IN_SECONDS>
-        <SHARD_DELAY_WAKEUP_IN_SECONDS>40</SHARD_DELAY_WAKEUP_IN_SECONDS>
+        <TERMINATION_COUNTDOWN_IN_SECONDS>0</TERMINATION_COUNTDOWN_IN_SECONDS>
+        <DS_DELAY_WAKEUP_IN_SECONDS>5</DS_DELAY_WAKEUP_IN_SECONDS>
+        <SHARD_DELAY_WAKEUP_IN_SECONDS>10</SHARD_DELAY_WAKEUP_IN_SECONDS>
         <NUM_FORWARDED_BLOCK_RECEIVERS_PER_SHARD>10</NUM_FORWARDED_BLOCK_RECEIVERS_PER_SHARD>
         <NUM_OF_TREEBASED_CHILD_CLUSTERS>5</NUM_OF_TREEBASED_CHILD_CLUSTERS>
         <FETCH_LOOKUP_MSG_MAX_RETRY>3</FETCH_LOOKUP_MSG_MAX_RETRY>
         <MAX_CONTRACT_DEPTH>5</MAX_CONTRACT_DEPTH>
         <COMMIT_WINDOW_IN_SECONDS>5</COMMIT_WINDOW_IN_SECONDS>
         <NUM_CONSENSUS_SUBSETS>1</NUM_CONSENSUS_SUBSETS>
-        <MISORDER_TOLERANCE_IN_PERCENT>5</MISORDER_TOLERANCE_IN_PERCENT>
+        <MISORDER_TOLERANCE_IN_PERCENT>25</MISORDER_TOLERANCE_IN_PERCENT>
         <MAX_CODE_SIZE_IN_BYTES>20480</MAX_CODE_SIZE_IN_BYTES>
         <LOOKUP_REWARD_IN_PERCENT>5</LOOKUP_REWARD_IN_PERCENT>
         <PUMPMESSAGE_MILLISECONDS>1</PUMPMESSAGE_MILLISECONDS>
@@ -109,7 +107,7 @@
     </gas>
     <dispatcher>
         <USE_REMOTE_TXN_CREATOR>false</USE_REMOTE_TXN_CREATOR>
-        <TXN_PATH/>
+        <TXN_PATH>/mnt/zilliqa_txns</TXN_PATH>
     </dispatcher>
     <archival>
         <DB_HOST/>
@@ -130,40 +128,51 @@
     </smart_contract>
     <accounts>
         <account>
+            <private_key>2A995ADB71F9110B519AAEE4959B6E611218FE42F1C554B3D0175DB5D5F54759</private_key>
             <wallet_address>cc02a3c906612cc5bdb087a30e6093c9f0aa04fc</wallet_address>
+        </account>
+        <account>
+            <private_key>3375F915F3F9AE35E6B301B7670F53AD1A5BE15D8221EC7FD5E503F21D3450C8</private_key>
+            <wallet_address>8254b2c9acdf181d5d6796d63320fbb20d4edd12</wallet_address>
+        </account>
+        <account>
+            <private_key>0FC87CC5ACF5A1433DE7301972B9649EE31688F291F781396B0F67AD98A88246</private_key>
+            <wallet_address>affc3236b726660ed9b99dff11451e4e8c107dea</wallet_address>
+        </account>
+        <account>
+            <private_key>EED54FF9A0B20164A96F6C96EBC32D64EE535DEBFFF5EDB6CDAA554E659AD6D3</private_key>
+            <wallet_address>465a6ed0572b5b09aade72d3ee158d6238f8f7b9</wallet_address>
+        </account>
+        <account>
+            <private_key>0E393A5563037D912EB14FE3E5B3A7F56C8E557BBC93652B409B3CA656DEE8F5</private_key>
+            <wallet_address>0c51808101be8673f4e136b2a7dcca4e9bea38a5</wallet_address>
+        </account>
+        <account>
+            <private_key>5CBB2D96A04D1EDE56DA7F12704A098E6015CD5C599966C56DCAA04825339BE0</private_key>
+            <wallet_address>956c698fca564f44694fe5a88838ee0b6381509f</wallet_address>
+        </account>
+        <account>
+            <private_key>D73DDCD02135FA1C8C132FEA4662AB6BBC2388AE1A6C6E820BECB16D9A9DBB29</private_key>
+            <wallet_address>604caa8b1120eb124e4df4e1ab3cf1b8d54baf00</wallet_address>
+        </account>
+        <account>
+            <private_key>C33DED115CBDFE3E3E904CF84A456F21A4EE4D663AD396424CAAA0C8461D3E5D</private_key>
+            <wallet_address>2b79ce6066a9697c14e3a2bdf400d4fb5b36691c</wallet_address>
+        </account>
+        <account>
+            <private_key>50DAFDB8B1E4615AB7FC7AACC53A28A7EA2EE76600801CA002DAD2F9C6B9A62B</private_key>
+            <wallet_address>9564bee628816404bde310beb7240e99c462147d</wallet_address>
+        </account>
+        <account>
+            <private_key>5B4D818CEE58F1B860B4EFE25104A8C4318E9A261447013BAF8B4E3E034CC70C</private_key>
+            <wallet_address>18f498810e4c6dba67df1d9b41590f63aec5ba7f</wallet_address>
         </account>
     </accounts>
     <lookups>
-        <!--IP to be provided after public testnet launch.
-        <peer>
-            <ip></ip>
-            <port>30303</port>
-            <pubkey></pubkey>
-        </peer>
-        <peer>
-            <ip></ip>
-            <port>30303</port>
-            <pubkey></pubkey>
-        </peer>
-        <peer>
-            <ip></ip>
-            <port>30303</port>
-            <pubkey></pubkey>
-        </peer>
-        <peer>
-            <ip></ip>
-            <port>30303</port>
-            <pubkey></pubkey>
-        </peer>
-        <peer>
-            <ip></ip>
-            <port>30303</port>
-            <pubkey></pubkey>
-        </peer>
-    -->
+    
     </lookups>
-    <gpu>
-        <!-- Which GPU to use, can use multiple GPU, for example: "0, 2, 4" -->
+<gpu>
+        
         <GPU_TO_USE>0</GPU_TO_USE>
         <opencl>
             <LOCAL_WORK_SIZE>128</LOCAL_WORK_SIZE>
