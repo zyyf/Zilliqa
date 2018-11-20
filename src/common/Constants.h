@@ -185,6 +185,7 @@ extern const unsigned int LOOKUP_REWARD_IN_PERCENT;
 extern const unsigned int PUMPMESSAGE_MILLISECONDS;
 extern const unsigned int MAXRETRYCONN;
 extern const unsigned int SIMULATED_NETWORK_DELAY_IN_MS;
+extern const unsigned int TXN_PACKET_DELAY_IN_SEC;
 
 // gas
 extern const unsigned int MICROBLOCK_GAS_LIMIT;

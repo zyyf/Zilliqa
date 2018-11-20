@@ -3048,9 +3048,10 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
     return;
   }
 
+  std::this_thread::sleep_for(std::chrono::seconds(TXN_PACKET_DELAY_IN_SEC));
   static unsigned int s = 0;
 
-  std::vector<int> txns = {30, 180, 360, 1500, 3000, 6000, 12000};
+  std::vector<int> txns = {30, 180, 360, 1500, 3000, 4500, 6000, 12000};
   for (auto transactionNumber : txns) {
     map<uint32_t, vector<Transaction>> mp;
 
@@ -3132,9 +3133,8 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
                               << " Sent DS the txns");
       }
     }
-    std::this_thread::sleep_for(
-        // std::chrono::seconds(TXN_PACKET_DELAY_IN_SEC));
-        std::chrono::seconds(10));
+    std::this_thread::sleep_for(std::chrono::seconds(TXN_PACKET_DELAY_IN_SEC));
+    // std::chrono::seconds(10));
   }
   s++;
 }
