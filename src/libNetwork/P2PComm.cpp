@@ -261,6 +261,10 @@ void SendJob::SendMessageCore(const Peer& peer,
                               unsigned char startbyte,
                               const vector<unsigned char> hash) {
   uint32_t retry_counter = 0;
+  if (SIMULATED_NETWORK_DELAY_IN_MS > 0) {
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(SIMULATED_NETWORK_DELAY_IN_MS));
+  }
   while (!SendMessageSocketCore(peer, message, startbyte, hash)) {
     retry_counter++;
     LOG_GENERAL(WARNING, "Socket connect failed " << retry_counter << "/"
