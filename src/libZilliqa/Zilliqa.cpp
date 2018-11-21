@@ -72,11 +72,6 @@ void Zilliqa::ProcessMessage(pair<vector<unsigned char>, Peer>* message) {
         sizeof(msg_handlers) / sizeof(Executable*);
 
     if (msg_type < msg_handlers_count) {
-      if (msg_handlers[msg_type] == NULL) {
-        LOG_GENERAL(WARNING, "Message type NULL");
-        return;
-      }
-
       bool result = msg_handlers[msg_type]->Execute(
           message->first, MessageOffset::INST, message->second);
 
@@ -245,11 +240,6 @@ vector<Peer> Zilliqa::RetrieveBroadcastList(unsigned char msg_type,
       sizeof(msg_handlers) / sizeof(Broadcastable*);
 
   if (msg_type < msg_handlers_count) {
-    if (msg_handlers[msg_type] == NULL) {
-      LOG_GENERAL(WARNING, "Message type NULL");
-      return vector<Peer>();
-    }
-
     return msg_handlers[msg_type]->GetBroadcastList(ins_type, from);
   } else {
     LOG_GENERAL(WARNING,
