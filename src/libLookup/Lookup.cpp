@@ -3050,19 +3050,25 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
 
   std::this_thread::sleep_for(std::chrono::seconds(TXN_PACKET_DELAY_IN_SEC));
   static unsigned int s = 0;
+  static int txnId = 0;
 
-  std::vector<int> txns = {30, 180, 360, 1500, 3000, 4500, 6000, 12000, 24000};
+  std::vector<int> txns = {30, 180, 360, 1500, 3000, 4500, 6000, 12000};
+  int packetIndex = 0;
   for (auto transactionNumber : txns) {
-    map<uint32_t, vector<Transaction>> mp;
+    map<uint32_t, vector<vector<Transaction>>> mp;
 
     /*    if (!GenTxnToSend(txns[i], mp, numShards)) {
           LOG_GENERAL(WARNING, "GenTxnToSend failed");
           // return;
         }
     */
+
     for (unsigned int i = 0; i < numShards + 1; i++) {
       vector<unsigned char> msg = {MessageType::NODE,
                                    NodeInstructionType::FORWARDTXNPACKET};
+
+      vector<vector<unsigned char>> msgs;
+
       bool result = false;
 
       {
@@ -3071,30 +3077,48 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
 
         // dummy
         int k = 0;
-        while (k < transactionNumber) {
-          mp[i].emplace_back(Transaction());
-          k++;
+        bool failed = false;
+        for (unsigned int j = 0; j < NUM_NODES_TO_SEND_LOOKUP && !failed; j++) {
+          vector<Transaction> tmp;
+          mp[i].emplace_back();
+          k = 0;
+          while (k < transactionNumber) {
+            mp[i][j].push_back(Transaction(++txnId));
+            k++;
+          }
+
+          LOG_GENERAL(INFO,
+                      "Transaction number generated: " << transactionNumber);
+
+          result = Messenger::SetNodeForwardTxnBlock(
+              msg, MessageOffset::BODY, m_mediator.m_currentEpochNum, i,
+              m_mediator.m_selfKey, m_txnShardMap[i], mp[i][j]);
+
+          if (!result) {
+            LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+                      "Messenger::SetNodeForwardTxnBlock failed.");
+            LOG_GENERAL(WARNING, "Cannot create packet for " << i << " shard");
+            failed = true;
+            continue;
+          }
+
+          msgs.emplace_back(msg);
+          if (LOOKUPTEST_SAME_PACKET_INITIATED_BY_DIFF_SENDER) {
+            break;
+          }
         }
 
-        LOG_GENERAL(INFO,
-                    "Transaction number generated: " << transactionNumber);
-
-        result = Messenger::SetNodeForwardTxnBlock(
-            msg, MessageOffset::BODY, m_mediator.m_currentEpochNum, i,
-            m_mediator.m_selfKey, m_txnShardMap[i], mp[i]);
+        if (failed) {
+          continue;
+        }
       }
 
-      if (!result) {
-        LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
-                  "Messenger::SetNodeForwardTxnBlock failed.");
-        LOG_GENERAL(WARNING, "Cannot create packet for " << i << " shard");
-        continue;
-      }
       vector<Peer> toSend;
       if (i < numShards) {
         {
           lock_guard<mutex> g(m_mediator.m_ds->m_mutexShards);
-          if (s >= (unsigned int)m_mediator.m_ds->m_shards.at(i).size()) {
+          if (s + NUM_NODES_TO_SEND_LOOKUP - 1 >=
+              (unsigned int)m_mediator.m_ds->m_shards.at(i).size()) {
             s = 0;
           }
           auto it = m_mediator.m_ds->m_shards.at(i).begin() + s;
@@ -3103,19 +3127,25 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
                                    it != m_mediator.m_ds->m_shards.at(i).end();
                j++, it++) {
             toSend.push_back(std::get<SHARD_NODE_PEER>(*it));
+            if (LOOKUPTEST_SAME_PACKET_INITIATED_BY_DIFF_SENDER) {
+              P2PComm::GetInstance().SendBroadcastMessage(toSend, msgs[0]);
+            } else {
+              P2PComm::GetInstance().SendBroadcastMessage(toSend, msgs[j]);
+            }
+
+            LOG_GENERAL(INFO, "Packet disposed off to "
+                                  << i << " shard with packet size: "
+                                  << txns[packetIndex]);
+            toSend.clear();
           }
         }
-
-        P2PComm::GetInstance().SendBroadcastMessage(toSend, msg);
-
-        LOG_GENERAL(INFO, "Packet disposed off to " << i << " shard");
-
         DeleteTxnShardMap(i);
       } else if (i == numShards) {
         // To send DS
         {
           lock_guard<mutex> g(m_mediator.m_mutexDSCommittee);
-          if (s >= (unsigned int)m_mediator.m_DSCommittee->size()) {
+          if (s + NUM_NODES_TO_SEND_LOOKUP - 1 >=
+              (unsigned int)m_mediator.m_DSCommittee->size()) {
             s = 0;
           }
           auto it = m_mediator.m_DSCommittee->begin() + s;
@@ -3124,17 +3154,21 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
                                    it != m_mediator.m_DSCommittee->end();
                j++, it++) {
             toSend.push_back(it->second);
+            if (LOOKUPTEST_SAME_PACKET_INITIATED_BY_DIFF_SENDER) {
+              P2PComm::GetInstance().SendBroadcastMessage(toSend, msgs[0]);
+            } else {
+              P2PComm::GetInstance().SendBroadcastMessage(toSend, msgs[j]);
+            }
+            LOG_GENERAL(INFO, "[DSMB]"
+                                  << " Sent DS the txns with packet size: "
+                                  << txns[packetIndex]);
+            toSend.clear();
           }
         }
-
-        P2PComm::GetInstance().SendBroadcastMessage(toSend, msg);
-
-        LOG_GENERAL(INFO, "[DSMB]"
-                              << " Sent DS the txns");
       }
     }
     std::this_thread::sleep_for(std::chrono::seconds(TXN_PACKET_DELAY_IN_SEC));
-    // std::chrono::seconds(10));
+    packetIndex++;
   }
   s++;
 }

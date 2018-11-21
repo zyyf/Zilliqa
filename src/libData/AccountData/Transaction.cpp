@@ -39,6 +39,11 @@ bool Transaction::SerializeCoreFields(std::vector<unsigned char>& dst,
 
 Transaction::Transaction() {}
 
+// hack to change every txn
+Transaction::Transaction(const unsigned int& amount) {
+  m_coreInfo.amount = (boost::multiprecision::uint256_t)amount;
+}
+
 Transaction::Transaction(const Transaction& src)
     : m_tranID(src.m_tranID),
       m_coreInfo(src.m_coreInfo),

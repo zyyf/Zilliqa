@@ -80,6 +80,8 @@ class Transaction : public SerializableDataBlock {
   /// Default constructor.
   Transaction();
 
+  Transaction(const unsigned int& amount);
+
   /// Copy constructor.
   Transaction(const Transaction& src);
 
