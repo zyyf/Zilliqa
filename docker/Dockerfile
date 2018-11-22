@@ -73,7 +73,7 @@ RUN git clone ${REPO} ${SOURCE_DIR} \
     && git -C ${SOURCE_DIR} checkout ${COMMIT} \
     # && git -C ${SOURCE_DIR} submodule update --init --recursive \
     && cmake -H${SOURCE_DIR} -B${BUILD_DIR} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
-        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
+        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} -DVC_TEST_DS_SUSPEND_1=1 \
     && cmake --build ${BUILD_DIR} -- -j$(nproc) \
     && cmake --build ${BUILD_DIR} --target install \
     && rm -rf ${BUILD_DIR}
