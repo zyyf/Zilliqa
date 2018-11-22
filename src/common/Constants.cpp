@@ -250,6 +250,7 @@ const bool ARCHIVAL_NODE{ReadFromOptionsFile("ARCHIVAL_NODE") == "true"};
 const bool LOOKUPTEST_SAME_PACKET_INITIATED_BY_DIFF_SENDER{
     ReadFromOptionsFile("LOOKUPTEST_SAME_PACKET_INITIATED_BY_DIFF_SENDER") ==
     "true"};
+const std::string PKT_SIZES{ReadFromOptionsFile("PKT_SIZES")};
 
 // gas
 const unsigned int MICROBLOCK_GAS_LIMIT{

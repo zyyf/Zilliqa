@@ -225,6 +225,7 @@ extern const bool GET_INITIAL_DS_FROM_REPO;
 extern const std::string UPGRADE_HOST_ACCOUNT;
 extern const std::string UPGRADE_HOST_REPO;
 extern const bool LOOKUPTEST_SAME_PACKET_INITIATED_BY_DIFF_SENDER;
+extern const std::string PKT_SIZES;
 
 extern const std::vector<std::string> GENESIS_WALLETS;
 extern const std::vector<std::string> GENESIS_KEYS;

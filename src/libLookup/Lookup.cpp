@@ -3055,7 +3055,17 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
 
   unsigned int run = 1;
   while (run <= TEST_NUM_OF_RUNS) {
-    std::vector<int> txns = {30, 180, 360, 1500, 3000, 4500, 6000};  //, 12000};
+    std::stringstream ss(PKT_SIZES);
+    int i;
+    std::vector<int> txns;
+    while (ss >> i) {
+      txns.push_back(i);
+
+      if (ss.peek() == ',') ss.ignore();
+    }
+
+    // std::vector<int> txns = {30, 180, 360, 1500, 3000, 4500, 6000};  //,
+    // 12000};
     int packetIndex = 0;
     for (auto transactionNumber : txns) {
       map<uint32_t, vector<vector<Transaction>>> mp;
