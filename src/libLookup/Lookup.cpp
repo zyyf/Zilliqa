@@ -3053,9 +3053,9 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
   static unsigned int s = 0;
   static int txnId = 0;
 
-  unsigned int run = TEST_NUM_OF_RUNS;
-  while (run-- > 0) {
-    std::vector<int> txns = {30, 180, 360, 1500, 3000, 4500, 6000, 12000};
+  unsigned int run = 1;
+  while (run <= TEST_NUM_OF_RUNS) {
+    std::vector<int> txns = {30, 180, 360, 1500, 3000, 4500, 6000};  //, 12000};
     int packetIndex = 0;
     for (auto transactionNumber : txns) {
       map<uint32_t, vector<vector<Transaction>>> mp;
@@ -3195,7 +3195,8 @@ void Lookup::SendTxnPacketToNodes(uint32_t numShards) {
           std::chrono::seconds(TXN_PACKET_DELAY_IN_SEC));
       packetIndex++;
     }
-    s++;
+    s = s + NUM_NODES_TO_SEND_LOOKUP;
+    run++;
   }
 }
 
