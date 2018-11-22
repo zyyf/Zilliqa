@@ -186,6 +186,7 @@ extern const unsigned int PUMPMESSAGE_MILLISECONDS;
 extern const unsigned int MAXRETRYCONN;
 extern const unsigned int SIMULATED_NETWORK_DELAY_IN_MS;
 extern const unsigned int TXN_PACKET_DELAY_IN_SEC;
+extern const unsigned int TEST_NUM_OF_RUNS;
 
 // gas
 extern const unsigned int MICROBLOCK_GAS_LIMIT;

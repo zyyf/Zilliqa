@@ -219,6 +219,7 @@ const unsigned int SIMULATED_NETWORK_DELAY_IN_MS{
     ReadFromConstantsFile("SIMULATED_NETWORK_DELAY_IN_MS")};
 const unsigned int TXN_PACKET_DELAY_IN_SEC{
     ReadFromConstantsFile("TXN_PACKET_DELAY_IN_SEC")};
+const unsigned int TEST_NUM_OF_RUNS{ReadFromConstantsFile("TEST_NUM_OF_RUNS")};
 
 #ifdef FALLBACK_TEST
 const unsigned int FALLBACK_TEST_EPOCH{

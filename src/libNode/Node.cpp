@@ -47,6 +47,7 @@
 #include "libPersistence/Retriever.h"
 #include "libUtils/DataConversion.h"
 #include "libUtils/DetachedFunction.h"
+#include "libUtils/HashUtils.h"
 #include "libUtils/Logger.h"
 #include "libUtils/SanityChecks.h"
 #include "libUtils/TimeLockedFunction.h"
@@ -961,9 +962,12 @@ bool Node::ProcessTxnPacketFromLookupCore(
   }
   LOG_GENERAL(INFO, "[Batching] Broadcast my txns to other shard members");
   if (BROADCAST_GOSSIP_MODE) {
+    std::vector<unsigned char> this_msg_hash = HashUtils::BytesToHash(message);
     if (P2PComm::GetInstance().SpreadRumor(message)) {
       LOG_STATE("[TXNPKTPROC-INITIATE]["
-                << message.size() << "]" << std::setw(15) << std::left
+                << message.size() << "]["
+                << DataConversion::Uint8VecToHexStr(this_msg_hash).substr(0, 6)
+                << "][" << std::setw(15) << std::left
                 << m_mediator.m_selfPeer.GetPrintableIPAddress() << "]["
                 << m_mediator.m_txBlockChain.GetLastBlock()
                            .GetHeader()
@@ -972,7 +976,9 @@ bool Node::ProcessTxnPacketFromLookupCore(
                 << "][" << shardId << "] BEGN");
     } else {
       LOG_STATE("[TXNPKTPROC]["
-                << message.size() << "]" << std::setw(15) << std::left
+                << message.size() << "]["
+                << DataConversion::Uint8VecToHexStr(this_msg_hash).substr(0, 6)
+                << "][" << std::setw(15) << std::left
                 << m_mediator.m_selfPeer.GetPrintableIPAddress() << "]["
                 << m_mediator.m_txBlockChain.GetLastBlock()
                            .GetHeader()
