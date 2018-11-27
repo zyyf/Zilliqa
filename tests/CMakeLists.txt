@@ -1,3 +1,4 @@
+add_subdirectory (googlemock)
 #add_subdirectory (Consensus)
 #add_subdirectory (Contracts)
 add_subdirectory (Crypto)
