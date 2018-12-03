@@ -19,8 +19,8 @@
 
 #include <limits>
 #include <random>
-#include "libDB/Archival.h"
-#include "libDB/ArchiveDB.h"
+#include "libArchival/Archival.h"
+#include "libArchival/ArchiveDB.h"
 #include "libMediator/Mediator.h"
 #include "libMessage/Messenger.h"
 #include "libUtils/Logger.h"
