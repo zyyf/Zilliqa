@@ -21,7 +21,10 @@
 #define __DIRECTORYSERVICE_H__
 
 #include <array>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 #include <condition_variable>
 #include <deque>
 #include <list>
@@ -36,10 +39,10 @@
 #include "libConsensus/Consensus.h"
 #include "libData/BlockData/Block.h"
 #include "libData/BlockData/BlockHeader/BlockHashSet.h"
+#include "libData/MiningData/DSPowSolution.h"
 #include "libLookup/Synchronizer.h"
 #include "libNetwork/P2PComm.h"
 #include "libNetwork/PeerStore.h"
-#include "libPOW/pow.h"
 #include "libPersistence/BlockStorage.h"
 #include "libUtils/TimeUtils.h"
 
@@ -49,20 +52,32 @@ struct PoWSolution {
   uint64_t nonce;
   std::array<unsigned char, 32> result;
   std::array<unsigned char, 32> mixhash;
+  uint32_t lookupId;
+  boost::multiprecision::uint128_t gasPrice;
 
   PoWSolution()
       : nonce(0),
         result({{0}}),
-        mixhash({{0}}) {
+        mixhash({{0}}),
+        lookupId(uint32_t() - 1),
+        gasPrice(0) {
+
   }  // The oldest DS (and now new shard node) will have this default value
   PoWSolution(const uint64_t n, const std::array<unsigned char, 32>& r,
-              const std::array<unsigned char, 32>& m)
-      : nonce(n), result(r), mixhash(m) {}
+              const std::array<unsigned char, 32>& m, uint32_t l,
+              const boost::multiprecision::uint128_t& gp)
+      : nonce(n), result(r), mixhash(m), lookupId(l), gasPrice(gp) {}
   bool operator==(const PoWSolution& rhs) const {
-    return (nonce == rhs.nonce) && (result == rhs.result) &&
-           (mixhash == rhs.mixhash);
+    return std::tie(nonce, result, mixhash, lookupId, gasPrice) ==
+           std::tie(rhs.nonce, rhs.result, rhs.mixhash, rhs.lookupId,
+                    rhs.gasPrice);
   }
 };
+
+namespace CoinbaseReward {
+const int FINALBLOCK_REWARD = -1;
+const int LOOKUP_REWARD = -2;
+}  // namespace CoinbaseReward
 
 using VectorOfPoWSoln =
     std::vector<std::pair<std::array<unsigned char, 32>, PubKey>>;
@@ -109,6 +124,11 @@ class DirectoryService : public Executable, public Broadcastable {
   // Consensus variables
   std::shared_ptr<ConsensusCommon> m_consensusObject;
   std::vector<unsigned char> m_consensusBlockHash;
+  std::atomic<bool> m_skippedDSMB;
+  std::mutex m_mutexCommitFailure;
+
+  /// Is it needed to validate the microblock in finalblock consensus
+  std::atomic<bool> m_needCheckMicroBlock;
 
   // PoW (DS block) consensus variables
   std::shared_ptr<DSBlock> m_pendingDSBlock;
@@ -118,11 +138,11 @@ class DirectoryService : public Executable, public Broadcastable {
   std::shared_ptr<TxBlock> m_finalBlock;
 
   struct MBSubmissionBufferEntry {
-    std::vector<MicroBlock> m_microBlocks;
+    MicroBlock m_microBlock;
     std::vector<unsigned char> m_stateDelta;
-    MBSubmissionBufferEntry(const std::vector<MicroBlock>& microBlocks,
+    MBSubmissionBufferEntry(const MicroBlock& microBlock,
                             const std::vector<unsigned char>& stateDelta)
-        : m_microBlocks(microBlocks), m_stateDelta(stateDelta) {}
+        : m_microBlock(microBlock), m_stateDelta(stateDelta) {}
   };
   std::mutex m_mutexMBSubmissionBuffer;
   std::unordered_map<uint64_t, std::vector<MBSubmissionBufferEntry>>
@@ -137,7 +157,6 @@ class DirectoryService : public Executable, public Broadcastable {
   std::condition_variable cv_MissingMicroBlock;
 
   // View Change
-  std::atomic<uint32_t> m_viewChangeCounter;
   std::atomic<uint32_t> m_candidateLeaderIndex;
   std::vector<std::pair<PubKey, Peer>> m_cumulativeFaultyLeaders;
   std::shared_ptr<VCBlock> m_pendingVCBlock;
@@ -168,15 +187,18 @@ class DirectoryService : public Executable, public Broadcastable {
 
   std::mutex m_mutexRunConsensusOnFinalBlock;
 
-  // TO Remove
   Mediator& m_mediator;
 
   uint32_t m_numOfAbsentMicroBlocks;
 
   // Coinbase
-  std::map<uint64_t, std::unordered_map<int32_t, std::vector<Address>>>
+  std::map<uint64_t, std::map<int32_t, std::vector<Address>>>
       m_coinbaseRewardees;
   std::mutex m_mutexCoinbaseRewardees;
+
+  // pow solutions
+  std::vector<DSPowSolution> m_powSolutions;
+  std::mutex m_mutexPowSolution;
 
   const uint32_t RESHUFFLE_INTERVAL = 500;
 
@@ -185,6 +207,10 @@ class DirectoryService : public Executable, public Broadcastable {
                          unsigned int offset, const Peer& from);
   bool ProcessPoWSubmission(const std::vector<unsigned char>& message,
                             unsigned int offset, const Peer& from);
+  bool ProcessPoWPacketSubmission(const std::vector<unsigned char>& message,
+                                  unsigned int offset, const Peer& from);
+  bool ProcessPoWSubmissionFromPacket(const DSPowSolution& sol);
+
   bool ProcessDSBlockConsensus(const std::vector<unsigned char>& message,
                                unsigned int offset, const Peer& from);
   bool ProcessMicroblockSubmission(const std::vector<unsigned char>& message,
@@ -195,10 +221,20 @@ class DirectoryService : public Executable, public Broadcastable {
                                       unsigned int offset, const Peer& from);
   bool ProcessViewChangeConsensus(const std::vector<unsigned char>& message,
                                   unsigned int offset, const Peer& from);
+  bool ProcessPushLatestDSBlock(const std::vector<unsigned char>& message,
+                                unsigned int offset, const Peer& from);
+  bool ProcessPushLatestTxBlock(const std::vector<unsigned char>& message,
+                                unsigned int offset, const Peer& from);
+  bool ProcessGetDSTxBlockMessage(const std::vector<unsigned char>& message,
+                                  unsigned int offset, const Peer& from);
+
   // To block certain types of incoming message for certain states
   bool ToBlockMessage(unsigned char ins_byte);
 
   bool CheckState(Action action);
+
+  bool CheckSolnFromNonDSCommittee(const PubKey& submitterPubKey,
+                                   const Peer& submitterPeer);
 
   // For PoW submission counter
   bool CheckPoWSubmissionExceedsLimitsForNode(const PubKey& key);
@@ -223,6 +259,17 @@ class DirectoryService : public Executable, public Broadcastable {
   void ComputeSharding(const VectorOfPoWSoln& sortedPoWSolns);
   void InjectPoWForDSNode(VectorOfPoWSoln& sortedPoWSolns,
                           unsigned int numOfProposedDSMembers);
+
+  // Gas Pricer
+  boost::multiprecision::uint128_t GetNewGasPrice();
+  boost::multiprecision::uint128_t GetHistoricalMeanGasPrice();
+  boost::multiprecision::uint128_t GetDecreasedGasPrice();
+  boost::multiprecision::uint128_t GetIncreasedGasPrice();
+  bool VerifyGasPrice(const boost::multiprecision::uint128_t& gasPrice);
+
+  void LookupCoinbase(const DequeOfShard& shards, const MapOfPubKeyPoW& allPow,
+                      const std::map<PubKey, Peer>& powDSWinner,
+                      const MapOfPubKeyPoW& dsPow);
 
   void ComputeTxnSharingAssignments(const std::vector<Peer>& proposedDSMembers);
   bool VerifyPoWWinner(const MapOfPubKeyPoW& dsWinnerPoWsFromLeader);
@@ -260,52 +307,47 @@ class DirectoryService : public Executable, public Broadcastable {
   void CommitFinalBlockConsensusBuffer();
 
   // Final Block functions
-  bool RunConsensusOnFinalBlockWhenDSPrimary();
   bool RunConsensusOnFinalBlockWhenDSBackup();
   bool ComposeFinalBlock();
   bool CheckWhetherDSBlockIsFresh(const uint64_t dsblock_num);
   void CommitMBSubmissionMsgBuffer();
   bool ProcessMicroblockSubmissionFromShard(
       const uint64_t epochNumber, const std::vector<MicroBlock>& microBlocks,
-      const std::vector<unsigned char>& stateDelta);
+      const std::vector<std::vector<unsigned char>>& stateDelta);
   bool ProcessMicroblockSubmissionFromShardCore(
-      const std::vector<MicroBlock>& microBlocks,
+      const MicroBlock& microBlocks,
       const std::vector<unsigned char>& stateDelta);
   bool ProcessMissingMicroblockSubmission(
       const uint64_t epochNumber, const std::vector<MicroBlock>& microBlocks,
-      const std::vector<unsigned char>& stateDelta);
-  void ExtractDataFromMicroblocks(BlockHash& microblockTrieRoot,
-                                  std::vector<BlockHash>& microblockHashes,
-                                  std::vector<uint32_t>& shardIds,
-                                  boost::multiprecision::uint256_t& allGasLimit,
-                                  boost::multiprecision::uint256_t& allGasUsed,
-                                  boost::multiprecision::uint256_t& allRewards,
-                                  uint32_t& numTxs,
-                                  std::vector<bool>& isMicroBlockEmpty,
-                                  uint32_t& numMicroBlocks);
+      const std::vector<std::vector<unsigned char>>& stateDeltas);
+  void ExtractDataFromMicroblocks(std::vector<MicroBlockInfo>& mbInfos,
+                                  uint64_t& allGasLimit, uint64_t& allGasUsed,
+                                  boost::multiprecision::uint128_t& allRewards,
+                                  uint32_t& numTxs);
   bool VerifyMicroBlockCoSignature(const MicroBlock& microBlock,
                                    uint32_t shardId);
   bool ProcessStateDelta(const std::vector<unsigned char>& stateDelta,
-                         const StateHash& microBlockStateDeltaHash);
+                         const StateHash& microBlockStateDeltaHash,
+                         const BlockHash& microBlockHash);
+  void SkipDSMicroBlock();
+  void PrepareRunConsensusOnFinalBlockNormal();
 
   // FinalBlockValidator functions
   bool CheckBlockHash();
   bool CheckFinalBlockValidity(std::vector<unsigned char>& errorMsg);
+  bool CheckMicroBlockValidity(std::vector<unsigned char>& errorMsg);
   bool CheckBlockTypeIsFinal();
   bool CheckFinalBlockVersion();
   bool CheckPreviousFinalBlockHash();
   bool CheckFinalBlockNumber();
   bool CheckFinalBlockTimestamp();
-  bool CheckMicroBlocks(std::vector<unsigned char>& errorMsg);
+  bool CheckMicroBlocks(std::vector<unsigned char>& errorMsg,
+                        bool fromShards = false);
   bool CheckLegitimacyOfMicroBlocks();
-  bool CheckMicroBlockHashRoot();
-  bool CheckExtraMicroBlockInfo();
+  bool CheckMicroBlockInfo();
   bool CheckStateRoot();
   bool CheckStateDeltaHash();
   void LoadUnavailableMicroBlocks();
-
-  // Redundant code
-  // bool WaitForTxnBodies();
 
   // DS block consensus validator function
   bool DSBlockValidator(const std::vector<unsigned char>& message,
@@ -343,6 +385,8 @@ class DirectoryService : public Executable, public Broadcastable {
                                        VCBlockSharedPtr& prevVCBlockptr);
   void StoreFinalBlockToDisk();
 
+  bool OnNodeFinalConsensusError(const std::vector<unsigned char>& errorMsg,
+                                 const Peer& from);
   bool OnNodeMissingMicroBlocks(const std::vector<unsigned char>& errorMsg,
                                 const Peer& from);
 
@@ -357,6 +401,7 @@ class DirectoryService : public Executable, public Broadcastable {
                                   unsigned int offset, const Peer& from);
 
   // View change
+  bool NodeVCPrecheck();
   void SetLastKnownGoodState();
   void RunConsensusOnViewChange();
   void ScheduleViewChangeTimeout();
@@ -368,6 +413,9 @@ class DirectoryService : public Executable, public Broadcastable {
       const uint32_t candidateLeaderIndex);
   void ProcessViewChangeConsensusWhenDone();
   void ProcessNextConsensus(unsigned char viewChangeState);
+
+  bool VCFetchLatestDSTxBlockFromLookupNodes();
+  std::vector<unsigned char> ComposeVCGetDSTxBlockMessage();
 
   // Reset certain variables to the initial state
   bool CleanVariables();
@@ -381,6 +429,11 @@ class DirectoryService : public Executable, public Broadcastable {
  public:
   enum Mode : unsigned char { IDLE = 0x00, PRIMARY_DS, BACKUP_DS };
 
+  enum RunFinalBlockConsensusOptions : unsigned char {
+    NORMAL = 0x00,
+    FROM_VIEWCHANGE
+  };
+
   enum DirState : unsigned char {
     POW_SUBMISSION = 0x00,
     DSBLOCK_CONSENSUS_PREP,
@@ -393,12 +446,6 @@ class DirectoryService : public Executable, public Broadcastable {
     ERROR
   };
 
-  enum RunFinalBlockConsensusOptions : unsigned char {
-    NORMAL = 0x00,
-    REVERT_STATEDELTA,
-    FROM_VIEWCHANGE
-  };
-
   /// Transaction sharing assignments
   std::vector<Peer> m_DSReceivers;
   std::vector<std::vector<Peer>> m_shardReceivers;
@@ -407,6 +454,13 @@ class DirectoryService : public Executable, public Broadcastable {
   enum SUBMITMICROBLOCKTYPE : unsigned char {
     SHARDMICROBLOCK = 0x00,
     MISSINGMICROBLOCK = 0x01
+  };
+
+  enum FINALCONSENSUSERRORTYPE : unsigned char {
+    CHECKMICROBLOCK = 0x00,
+    DSMBMISSINGTXN = 0x01,
+    CHECKFINALBLOCK = 0x02,
+    DSFBMISSINGMB = 0x03
   };
 
   /// Sharing assignment for state delta
@@ -438,6 +492,9 @@ class DirectoryService : public Executable, public Broadcastable {
   /// The state (before view change) of this DirectoryService instance.
   std::atomic<DirState> m_viewChangestate;
 
+  /// The counter of viewchange happened during current epoch
+  std::atomic<uint32_t> m_viewChangeCounter;
+
   /// The ID number of this Zilliqa instance for use with consensus operations.
   uint16_t m_consensusMyID;
 
@@ -447,14 +504,9 @@ class DirectoryService : public Executable, public Broadcastable {
   /// Serialized account store temp to revert to if ds microblock consensus
   /// failed
   std::vector<unsigned char> m_stateDeltaFromShards;
-  std::vector<unsigned char> m_stateDeltaWhenRunDSMB;
-
-  /// Whether to send txn from ds microblock to lookup at finalblock consensus
-  /// done
-  std::atomic<bool> m_toSendTxnToLookup;
 
   /// Whether ds started microblock consensus
-  std::atomic<bool> m_dsStartedMicroblockConsensus;
+  std::atomic<bool> m_stopRecvNewMBSubmission;
 
   /// Whether ds started finalblock consensus
   std::mutex m_mutexPrepareRunFinalblockConsensus;
@@ -463,9 +515,20 @@ class DirectoryService : public Executable, public Broadcastable {
   std::mutex m_mutexMicroBlocks;
   std::unordered_map<uint64_t, std::set<MicroBlock>> m_microBlocks;
   std::unordered_map<uint64_t, std::vector<BlockHash>> m_missingMicroBlocks;
-  boost::multiprecision::uint256_t m_totalTxnFees;
+  std::unordered_map<uint64_t,
+                     std::unordered_map<BlockHash, std::vector<unsigned char>>>
+      m_microBlockStateDeltas;
+  boost::multiprecision::uint128_t m_totalTxnFees;
 
   Synchronizer m_synchronizer;
+
+  // For view change pre check
+  std::vector<DSBlock> m_vcPreCheckDSBlocks;
+  std::vector<TxBlock> m_vcPreCheckTxBlocks;
+  std::mutex m_MutexCVViewChangePrecheckBlocks;
+
+  std::mutex m_MutexCVViewChangePrecheck;
+  std::condition_variable cv_viewChangePrecheck;
 
   /// Constructor. Requires mediator reference to access Node and other global
   /// members.
@@ -536,10 +599,9 @@ class DirectoryService : public Executable, public Broadcastable {
   void StartNewDSEpochConsensus(bool fromFallback = false);
 
   static uint8_t CalculateNewDifficultyCore(
-      uint8_t currentDifficulty, uint8_t minDifficulty, int64_t currentNodes,
-      int64_t powSubmissions, int64_t expectedNodes,
-      uint32_t maxAdjustThreshold, int64_t currentEpochNum,
-      int64_t numBlockPerYear);
+      uint8_t currentDifficulty, uint8_t minDifficulty, int64_t powSubmissions,
+      int64_t expectedNodes, uint32_t maxAdjustThreshold,
+      int64_t currentEpochNum, int64_t numBlockPerYear);
 
   /// Calculate node priority to determine which node has the priority to join
   /// the network.
@@ -551,8 +613,11 @@ class DirectoryService : public Executable, public Broadcastable {
 
   // Sort the PoW submissions. Put to public static function, so it can be
   // covered by auto test.
-  static VectorOfPoWSoln SortPoWSoln(const MapOfPubKeyPoW& pows);
+  static VectorOfPoWSoln SortPoWSoln(const MapOfPubKeyPoW& pows,
+                                     bool trimBeyondCommSize = false);
   int64_t GetAllPoWSize() const;
+
+  bool ProcessAndSendPoWPacketSubmissionToOtherDSComm();
 
  private:
   static std::map<DirState, std::string> DirStateStrings;
@@ -568,6 +633,8 @@ class DirectoryService : public Executable, public Broadcastable {
   bool IsNodeSubmittedDSPoWSoln(PubKey Pubk);
   uint32_t GetNumberOfDSPoWSolns();
   void ClearVCBlockVector();
+  bool RunConsensusOnFinalBlockWhenDSPrimary(
+      const RunFinalBlockConsensusOptions& options);
 };
 
 #endif  // __DIRECTORYSERVICE_H__

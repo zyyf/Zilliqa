@@ -17,6 +17,7 @@
  * program files.
  */
 #include "Constants.h"
+#include "libUtils/SafeMath.h"
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
@@ -39,6 +40,11 @@ unsigned int ReadFromConstantsFile(std::string propertyName) {
   return pt.get<unsigned int>("node.constants." + propertyName);
 }
 
+unsigned int ReadFromTestsFile(std::string propertyName) {
+  auto pt = PTree::GetInstance();
+  return pt.get<unsigned int>("node.tests." + propertyName);
+}
+
 std::string ReadFromOptionsFile(std::string propertyName) {
   auto pt = PTree::GetInstance();
   return pt.get<std::string>("node.options." + propertyName);
@@ -47,6 +53,11 @@ std::string ReadFromOptionsFile(std::string propertyName) {
 unsigned int ReadFromGasFile(std::string propertyName) {
   auto pt = PTree::GetInstance();
   return pt.get<unsigned int>("node.gas." + propertyName);
+}
+
+std::string ReadFromGasFileInString(std::string propertyName) {
+  auto pt = PTree::GetInstance();
+  return pt.get<std::string>("node.gas." + propertyName);
 }
 
 std::string ReadSmartContractConstants(std::string propertyName) {
@@ -109,6 +120,8 @@ const unsigned int POW_SUBMISSION_LIMIT{
 const unsigned int MICROBLOCK_TIMEOUT{
     ReadFromConstantsFile("MICROBLOCK_TIMEOUT")};
 const unsigned int VIEWCHANGE_TIME{ReadFromConstantsFile("VIEWCHANGE_TIME")};
+const unsigned int VIEWCHANGE_PRECHECK_TIME{
+    ReadFromConstantsFile("VIEWCHANGE_PRECHECK_TIME")};
 const unsigned int VIEWCHANGE_EXTRA_TIME{
     ReadFromConstantsFile("VIEWCHANGE_EXTRA_TIME")};
 const unsigned int CONSENSUS_MSG_ORDER_BLOCK_WINDOW{
@@ -117,12 +130,8 @@ const unsigned int CONSENSUS_OBJECT_TIMEOUT{
     ReadFromConstantsFile("CONSENSUS_OBJECT_TIMEOUT")};
 const unsigned int FETCHING_MISSING_DATA_TIMEOUT{
     ReadFromConstantsFile("FETCHING_MISSING_DATA_TIMEOUT")};
-const unsigned int DS_MICROBLOCK_CONSENSUS_OBJECT_TIMEOUT{
-    ReadFromConstantsFile("DS_MICROBLOCK_CONSENSUS_OBJECT_TIMEOUT")};
 const unsigned int NUM_FINAL_BLOCK_PER_POW{
     ReadFromConstantsFile("NUM_FINAL_BLOCK_PER_POW")};
-const unsigned int NUM_DS_KEEP_TX_BODY{
-    ReadFromConstantsFile("NUM_DS_KEEP_TX_BODY")};
 const uint32_t MAXMESSAGE{ReadFromConstantsFile("MAXMESSAGE")};
 const unsigned int TX_SHARING_CLUSTER_SIZE{
     ReadFromConstantsFile("TX_SHARING_CLUSTER_SIZE")};
@@ -157,8 +166,6 @@ const unsigned int FALLBACK_CHECK_INTERVAL{
     ReadFromConstantsFile("FALLBACK_CHECK_INTERVAL")};
 const unsigned int FALLBACK_EXTRA_TIME{
     ReadFromConstantsFile("FALLBACK_EXTRA_TIME")};
-const unsigned int FALLBACK_TEST_EPOCH{
-    ReadFromConstantsFile("FALLBACK_TEST_EPOCH")};
 const unsigned int MAX_ROUNDS_IN_BSTATE{
     ReadFromConstantsFile("MAX_ROUNDS_IN_BSTATE")};
 const unsigned int MAX_ROUNDS_IN_CSTATE{
@@ -167,8 +174,8 @@ const unsigned int MAX_TOTAL_ROUNDS{ReadFromConstantsFile("MAX_TOTAL_ROUNDS")};
 const unsigned int ROUND_TIME_IN_MS{ReadFromConstantsFile("ROUND_TIME_IN_MS")};
 const unsigned int MAX_NEIGHBORS_PER_ROUND{
     ReadFromConstantsFile("MAX_NEIGHBORS_PER_ROUND")};
-const unsigned int NUM_NODE_INCR_DIFFICULTY{
-    ReadFromConstantsFile("NUM_NODE_INCR_DIFFICULTY")};
+const unsigned int EXPECTED_SHARD_NODE_NUM{
+    ReadFromConstantsFile("EXPECTED_SHARD_NODE_NUM")};
 const unsigned int MAX_SHARD_NODE_NUM{
     ReadFromConstantsFile("MAX_SHARD_NODE_NUM")};
 const unsigned int NUM_MICROBLOCK_SENDERS{
@@ -201,10 +208,32 @@ const unsigned int MISORDER_TOLERANCE_IN_PERCENT{
     ReadFromConstantsFile("MISORDER_TOLERANCE_IN_PERCENT")};
 const unsigned int MAX_CODE_SIZE_IN_BYTES{
     ReadFromConstantsFile("MAX_CODE_SIZE_IN_BYTES")};
+const unsigned int LOOKUP_REWARD_IN_PERCENT{
+    ReadFromConstantsFile("LOOKUP_REWARD_IN_PERCENT")};
+const unsigned int PUMPMESSAGE_MILLISECONDS{
+    ReadFromConstantsFile("PUMPMESSAGE_MILLISECONDS")};
+const unsigned int MAXRETRYCONN{ReadFromConstantsFile("MAXRETRYCONN")};
+const unsigned int SIMULATED_NETWORK_DELAY_IN_MS{
+    ReadFromConstantsFile("SIMULATED_NETWORK_DELAY_IN_MS")};
+const unsigned int POW_PACKET_SENDERS{
+    ReadFromConstantsFile("POW_PACKET_SENDERS")};
+const unsigned int POWPACKETSUBMISSION_WINDOW_IN_SECONDS{
+    ReadFromConstantsFile("POWPACKETSUBMISSION_WINDOW_IN_SECONDS")};
+const unsigned int LOOKUP_DELAY_SEND_TXNPACKET_IN_MS{
+    ReadFromConstantsFile("LOOKUP_DELAY_SEND_TXNPACKET_IN_MS")};
+const unsigned int DELAY_FIRSTXNEPOCH_IN_MS{
+    ReadFromConstantsFile("DELAY_FIRSTXNEPOCH_IN_MS")};
+const unsigned int TXN_MISORDER_TOLERANCE_IN_PERCENT{
+    ReadFromConstantsFile("TXN_MISORDER_TOLERANCE_IN_PERCENT")};
+
+#ifdef FALLBACK_TEST
+const unsigned int FALLBACK_TEST_EPOCH{
+    ReadFromTestsFile("FALLBACK_TEST_EPOCH")};
+#endif  // FALLBACK_TEST
 
 // options
 const bool EXCLUDE_PRIV_IP{ReadFromOptionsFile("EXCLUDE_PRIV_IP") == "true"};
-const bool TEST_NET_MODE{ReadFromOptionsFile("TEST_NET_MODE") == "true"};
+const bool GUARD_MODE{ReadFromOptionsFile("GUARD_MODE") == "true"};
 const bool ENABLE_DO_REJOIN{ReadFromOptionsFile("ENABLE_DO_REJOIN") == "true"};
 const bool FULL_DATASET_MINE{ReadFromOptionsFile("FULL_DATASET_MINE") ==
                              "true"};
@@ -223,6 +252,8 @@ const std::string UPGRADE_HOST_ACCOUNT{
     ReadFromOptionsFile("UPGRADE_HOST_ACCOUNT")};
 const std::string UPGRADE_HOST_REPO{ReadFromOptionsFile("UPGRADE_HOST_REPO")};
 const bool ARCHIVAL_NODE{ReadFromOptionsFile("ARCHIVAL_NODE") == "true"};
+const bool SEND_RESPONSE_FOR_LAZY_PUSH{
+    ReadFromOptionsFile("SEND_RESPONSE_FOR_LAZY_PUSH") == "true"};
 
 // gas
 const unsigned int MICROBLOCK_GAS_LIMIT{
@@ -230,8 +261,26 @@ const unsigned int MICROBLOCK_GAS_LIMIT{
 const unsigned int CONTRACT_CREATE_GAS{ReadFromGasFile("CONTRACT_CREATE_GAS")};
 const unsigned int CONTRACT_INVOKE_GAS{ReadFromGasFile("CONTRACT_INVOKE_GAS")};
 const unsigned int NORMAL_TRAN_GAS{ReadFromGasFile("NORMAL_TRAN_GAS")};
-const unsigned int DEFAULT_MIN_GAS_PRICE{
-    ReadFromGasFile("DEFAULT_MIN_GAS_PRICE")};
+const unsigned int GAS_CONGESTION_PERCENT{
+    ReadFromGasFile("GAS_CONGESTION_PERCENT")};
+const unsigned int UNFILLED_PERCENT_LOW{
+    ReadFromGasFile("UNFILLED_PERCENT_LOW")};
+const unsigned int UNFILLED_PERCENT_HIGH{
+    ReadFromGasFile("UNFILLED_PERCENT_HIGH")};
+const unsigned int GAS_PRICE_PRECISION{ReadFromGasFile("GAS_PRICE_PRECISION")};
+const unsigned int GAS_PRICE_DROP_RATIO{
+    ReadFromGasFile("GAS_PRICE_DROP_RATIO")};
+const unsigned int GAS_PRICE_RAISE_RATIO_LOWER{
+    ReadFromGasFile("GAS_PRICE_RAISE_RATIO_LOWER")};
+const unsigned int GAS_PRICE_RAISE_RATIO_UPPER{
+    ReadFromGasFile("GAS_PRICE_RAISE_RATIO_UPPER")};
+const unsigned int GAS_PRICE_TOLERANCE{ReadFromGasFile("GAS_PRICE_TOLERANCE")};
+const unsigned int MEAN_GAS_PRICE_DS_NUM{
+    ReadFromGasFile("MEAN_GAS_PRICE_DS_NUM")};
+const boost::multiprecision::uint128_t PRECISION_MIN_VALUE{
+    SafeMath<boost::multiprecision::uint128_t>::power(10, GAS_PRICE_PRECISION)};
+const std::string LEGAL_GAS_PRICE_IP{
+    ReadFromGasFileInString("LEGAL_GAS_PRICE_IP")};
 
 // accounts
 const std::vector<std::string> GENESIS_WALLETS{
@@ -241,6 +290,8 @@ const std::vector<std::string> GENESIS_KEYS{
 
 // smart contract
 const std::string SCILLA_ROOT{ReadSmartContractConstants("SCILLA_ROOT")};
+const std::string SCILLA_CHECKER{SCILLA_ROOT + '/' +
+                                 ReadSmartContractConstants("SCILLA_CHECKER")};
 const std::string SCILLA_BINARY{SCILLA_ROOT + '/' +
                                 ReadSmartContractConstants("SCILLA_BINARY")};
 const std::string SCILLA_FILES{ReadSmartContractConstants("SCILLA_FILES")};

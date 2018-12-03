@@ -42,11 +42,13 @@ Account::Account(const vector<unsigned char>& src, unsigned int offset) {
   }
 }
 
-Account::Account(const uint256_t& balance, const uint256_t& nonce)
+Account::Account(const uint128_t& balance, const uint64_t& nonce)
     : m_balance(balance),
       m_nonce(nonce),
       m_storageRoot(h256()),
       m_codeHash(h256()) {}
+
+bool Account::isContract() const { return m_codeHash != dev::h256(); }
 
 void Account::InitStorage() {
   // LOG_MARKER();
@@ -112,6 +114,12 @@ void Account::InitContract() {
   }
 }
 
+void Account::SetCreateBlockNum(const uint64_t& blockNum) {
+  m_createBlockNum = blockNum;
+}
+
+const uint64_t& Account::GetCreateBlockNum() const { return m_createBlockNum; }
+
 bool Account::Serialize(vector<unsigned char>& dst, unsigned int offset) const {
   if (!Messenger::SetAccount(dst, offset, *this)) {
     LOG_GENERAL(WARNING, "Messenger::SetAccount failed.");
@@ -154,32 +162,40 @@ bool Account::DeserializeDelta(const vector<unsigned char>& src,
   return true;
 }
 
-bool Account::IncreaseBalance(const uint256_t& delta) {
-  return SafeMath<uint256_t>::add(m_balance, delta, m_balance);
+bool Account::IncreaseBalance(const uint128_t& delta) {
+  return SafeMath<uint128_t>::add(m_balance, delta, m_balance);
 }
 
-bool Account::DecreaseBalance(const uint256_t& delta) {
+bool Account::DecreaseBalance(const uint128_t& delta) {
   if (m_balance < delta) {
     return false;
   }
 
-  return SafeMath<uint256_t>::sub(m_balance, delta, m_balance);
+  return SafeMath<uint128_t>::sub(m_balance, delta, m_balance);
 }
 
 bool Account::ChangeBalance(const int256_t& delta) {
-  return (delta >= 0) ? IncreaseBalance(uint256_t(delta))
-                      : DecreaseBalance(uint256_t(-delta));
+  return (delta >= 0) ? IncreaseBalance(uint128_t(delta))
+                      : DecreaseBalance(uint128_t(-delta));
 }
+
+void Account::SetBalance(const uint128_t& balance) { m_balance = balance; }
+
+const uint128_t& Account::GetBalance() const { return m_balance; }
 
 bool Account::IncreaseNonce() {
   ++m_nonce;
   return true;
 }
 
-bool Account::IncreaseNonceBy(const uint256_t& nonceDelta) {
+bool Account::IncreaseNonceBy(const uint64_t& nonceDelta) {
   m_nonce += nonceDelta;
   return true;
 }
+
+void Account::SetNonce(const uint64_t& nonce) { m_nonce = nonce; }
+
+const uint64_t& Account::GetNonce() const { return m_nonce; }
 
 void Account::SetStorageRoot(const h256& root) {
   if (!isContract()) {
@@ -194,6 +210,8 @@ void Account::SetStorageRoot(const h256& root) {
   m_storage.setRoot(m_storageRoot);
   m_prevRoot = m_storageRoot;
 }
+
+const dev::h256& Account::GetStorageRoot() const { return m_storageRoot; }
 
 void Account::SetStorage(string k, string type, string v, bool is_mutable) {
   if (!isContract()) {
@@ -234,6 +252,16 @@ string Account::GetRawStorage(const h256& k_hash) const {
     return "";
   }
   return m_storage.at(k_hash);
+}
+
+Json::Value Account::GetInitJson() const { return m_initValJson; }
+
+const std::vector<unsigned char>& Account::GetInitData() const {
+  return m_initData;
+}
+
+void Account::SetInitData(const std::vector<unsigned char>& initData) {
+  m_initData = initData;
 }
 
 vector<h256> Account::GetStorageKeyHashes() const {
@@ -299,6 +327,8 @@ Json::Value Account::GetStorageJson() const {
   return root;
 }
 
+void Account::Commit() { m_prevRoot = m_storageRoot; }
+
 void Account::RollBack() {
   if (!isContract()) {
     LOG_GENERAL(WARNING, "Not a contract, why call Account::RollBack");
@@ -333,14 +363,15 @@ Address Account::GetAddressFromPublicKey(const PubKey& pubKey) {
 }
 
 Address Account::GetAddressForContract(const Address& sender,
-                                       const uint256_t& nonce) {
+                                       const uint64_t& nonce) {
   Address address;
 
   SHA2<HASH_TYPE::HASH_VARIANT_256> sha2;
-  sha2.Update(sender.asBytes());
-  vector<unsigned char> nonceBytes;
-  SetNumber<uint256_t>(nonceBytes, 0, nonce, UINT256_SIZE);
-  sha2.Update(nonceBytes);
+  vector<unsigned char> conBytes;
+  copy(sender.asArray().begin(), sender.asArray().end(),
+       back_inserter(conBytes));
+  SetNumber<uint64_t>(conBytes, conBytes.size(), nonce, sizeof(uint64_t));
+  sha2.Update(conBytes);
 
   const vector<unsigned char>& output = sha2.Finalize();
 
@@ -370,6 +401,12 @@ void Account::SetCode(const vector<unsigned char>& code) {
 
   InitStorage();
 }
+
+const std::vector<unsigned char>& Account::GetCode() const {
+  return m_codeCache;
+}
+
+const dev::h256& Account::GetCodeHash() const { return m_codeHash; }
 
 const h256 Account::GetKeyHash(const string& key) const {
   SHA2<HASH_TYPE::HASH_VARIANT_256> sha2;

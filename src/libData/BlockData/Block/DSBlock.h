@@ -21,7 +21,10 @@
 #define __DSBLOCK_H__
 
 #include <array>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 
 #include "BlockBase.h"
 #include "common/Constants.h"
@@ -44,7 +47,6 @@ class DSBlock : public BlockBase {
 
   /// Constructor with specified DS block parameters.
   DSBlock(const DSBlockHeader& header, CoSignatures&& cosigs);
-  DSBlock(const DSBlockHeader& header);
 
   /// Implements the Serialize function inherited from Serializable.
   bool Serialize(std::vector<unsigned char>& dst, unsigned int offset) const;

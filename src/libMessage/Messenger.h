@@ -25,6 +25,7 @@
 #include "libData/AccountData/ForwardedTxnEntry.h"
 #include "libData/BlockData/Block.h"
 #include "libData/BlockData/Block/FallbackBlockWShardingStructure.h"
+#include "libData/MiningData/DSPowSolution.h"
 #include "libDirectoryService/DirectoryService.h"
 #include "libDirectoryService/ShardStruct.h"
 #include "libNetwork/Peer.h"
@@ -85,13 +86,13 @@ class Messenger {
                                    const unsigned int offset,
                                    AccountStoreTemp& accountStoreTemp);
 
-  static bool GetExtraMbInfoHash(const std::vector<bool>& isMicroBlockEmpty,
-                                 const std::vector<uint32_t>& shardIds,
-                                 MBInfoHash& dst);
+  static bool GetMbInfoHash(const std::vector<MicroBlockInfo>& mbInfos,
+                            MBInfoHash& dst);
 
   static bool SetDSBlockHeader(std::vector<unsigned char>& dst,
                                const unsigned int offset,
-                               const DSBlockHeader& dsBlockHeader);
+                               const DSBlockHeader& dsBlockHeader,
+                               bool concreteVarsOnly = false);
   static bool GetDSBlockHeader(const std::vector<unsigned char>& src,
                                const unsigned int offset,
                                DSBlockHeader& dsBlockHeader);
@@ -182,6 +183,10 @@ class Messenger {
   static bool GetTransactionWithReceipt(
       const std::vector<unsigned char>& src, const unsigned int offset,
       TransactionWithReceipt& transactionWithReceipt);
+  static bool SetPeer(std::vector<unsigned char>& dst,
+                      const unsigned int offset, const Peer& peer);
+  static bool GetPeer(const std::vector<unsigned char>& src,
+                      const unsigned int offset, Peer& peer);
 
   // ============================================================================
   // Directory Service messages
@@ -192,27 +197,34 @@ class Messenger {
       const uint64_t blockNumber, const uint8_t difficultyLevel,
       const Peer& submitterPeer, const std::pair<PrivKey, PubKey>& submitterKey,
       const uint64_t nonce, const std::string& resultingHash,
-      const std::string& mixHash);
+      const std::string& mixHash, const uint32_t& lookupId,
+      const boost::multiprecision::uint128_t& gasPrice);
 
-  static bool GetDSPoWSubmission(const std::vector<unsigned char>& src,
-                                 const unsigned int offset,
-                                 uint64_t& blockNumber,
-                                 uint8_t& difficultyLevel, Peer& submitterPeer,
-                                 PubKey& submitterPubKey, uint64_t& nonce,
-                                 std::string& resultingHash,
-                                 std::string& mixHash, Signature& signature);
+  static bool GetDSPoWSubmission(
+      const std::vector<unsigned char>& src, const unsigned int offset,
+      uint64_t& blockNumber, uint8_t& difficultyLevel, Peer& submitterPeer,
+      PubKey& submitterPubKey, uint64_t& nonce, std::string& resultingHash,
+      std::string& mixHash, Signature& signature, uint32_t& lookupId,
+      boost::multiprecision::uint128_t& gasPrice);
+
+  static bool SetDSPoWPacketSubmission(
+      std::vector<unsigned char>& dst, const unsigned int offset,
+      const std::vector<DSPowSolution>& dsPowSolutions);
+
+  static bool GetDSPowPacketSubmission(
+      const std::vector<unsigned char>& src, const unsigned int offset,
+      std::vector<DSPowSolution>& dsPowSolutions);
 
   static bool SetDSMicroBlockSubmission(
       std::vector<unsigned char>& dst, const unsigned int offset,
       const unsigned char microBlockType, const uint64_t epochNumber,
       const std::vector<MicroBlock>& microBlocks,
-      const std::vector<unsigned char>& stateDelta);
-  static bool GetDSMicroBlockSubmission(const std::vector<unsigned char>& src,
-                                        const unsigned int offset,
-                                        unsigned char& microBlockType,
-                                        uint64_t& epochNumber,
-                                        std::vector<MicroBlock>& microBlocks,
-                                        std::vector<unsigned char>& stateDelta);
+      const std::vector<std::vector<unsigned char>>& stateDeltas);
+  static bool GetDSMicroBlockSubmission(
+      const std::vector<unsigned char>& src, const unsigned int offset,
+      unsigned char& microBlockType, uint64_t& epochNumber,
+      std::vector<MicroBlock>& microBlocks,
+      std::vector<std::vector<unsigned char>>& stateDeltas);
 
   static bool SetDSDSBlockAnnouncement(
       std::vector<unsigned char>& dst, const unsigned int offset,
@@ -241,6 +253,7 @@ class Messenger {
       const uint32_t consensusID, const uint64_t blockNumber,
       const std::vector<unsigned char>& blockHash, const uint16_t leaderID,
       const std::pair<PrivKey, PubKey>& leaderKey, const TxBlock& txBlock,
+      const std::shared_ptr<MicroBlock>& microBlock,
       std::vector<unsigned char>& messageToCosign);
 
   static bool GetDSFinalBlockAnnouncement(
@@ -248,6 +261,7 @@ class Messenger {
       const uint32_t consensusID, const uint64_t blockNumber,
       const std::vector<unsigned char>& blockHash, const uint16_t leaderID,
       const PubKey& leaderKey, TxBlock& txBlock,
+      std::shared_ptr<MicroBlock>& microBlock,
       std::vector<unsigned char>& messageToCosign);
 
   static bool SetDSVCBlockAnnouncement(
@@ -485,10 +499,9 @@ class Messenger {
       std::vector<unsigned char>& dst, const unsigned int offset,
       const std::pair<PrivKey, PubKey>& lookupKey,
       const AccountStore& accountStore);
-  static bool GetLookupSetStateFromSeed(const std::vector<unsigned char>& src,
-                                        const unsigned int offset,
-                                        PubKey& lookupPubKey,
-                                        AccountStore& accountStore);
+  static bool GetLookupSetStateFromSeed(
+      const std::vector<unsigned char>& src, const unsigned int offset,
+      PubKey& lookupPubKey, std::vector<unsigned char>& accountStoreBytes);
   static bool SetLookupSetLookupOffline(std::vector<unsigned char>& dst,
                                         const unsigned int offset,
                                         const uint32_t listenPort);
@@ -696,5 +709,31 @@ class Messenger {
           boost::variant<DSBlock, VCBlock, FallbackBlockWShardingStructure>>&
           directoryBlocks,
       uint64_t& index_num);
+
+  // ============================================================================
+  // View change pre check messages
+  // ============================================================================
+
+  static bool SetLookupGetDSTxBlockFromSeed(std::vector<unsigned char>& dst,
+                                            const unsigned int offset,
+                                            const uint64_t dsLowBlockNum,
+                                            const uint64_t dsHighBlockNum,
+                                            const uint64_t txLowBlockNum,
+                                            const uint64_t txHighBlockNum,
+                                            const uint32_t listenPort);
+
+  static bool GetLookupGetDSTxBlockFromSeed(
+      const std::vector<unsigned char>& src, const unsigned int offset,
+      uint64_t& dsLowBlockNum, uint64_t& dsHighBlockNum,
+      uint64_t& txLowBlockNum, uint64_t& txHighBlockNum, uint32_t& listenPort);
+  static bool SetVCNodeSetDSTxBlockFromSeed(
+      std::vector<unsigned char>& dst, const unsigned int offset,
+      const std::pair<PrivKey, PubKey>& lookupKey,
+      const std::vector<DSBlock>& DSBlocks,
+      const std::vector<TxBlock>& txBlocks);
+  static bool GetVCNodeSetDSTxBlockFromSeed(
+      const std::vector<unsigned char>& src, const unsigned int offset,
+      std::vector<DSBlock>& dsBlocks, std::vector<TxBlock>& txBlocks,
+      PubKey& lookupPubKey);
 };
 #endif  // __MESSENGER_H__

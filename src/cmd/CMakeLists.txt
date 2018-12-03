@@ -16,13 +16,6 @@ add_custom_command(TARGET zilliqa
 target_include_directories(sendcmd PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(sendcmd PUBLIC Network Utils)
 
-add_executable(sendtxn send_txn.cpp)
-add_custom_command(TARGET zilliqa
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:sendtxn> ${CMAKE_BINARY_DIR}/tests/Zilliqa)
-target_include_directories(sendtxn PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(sendtxn PUBLIC Network Utils)
-
 add_executable(genkeypair genkeypair.cpp)
 add_custom_command(TARGET zilliqa
     POST_BUILD
@@ -35,7 +28,7 @@ add_custom_command(TARGET zilliqa
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:gentxn> ${CMAKE_BINARY_DIR}/tests/Zilliqa)
 target_include_directories(gentxn PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(gentxn PUBLIC AccountData Message)
+target_link_libraries(gentxn PUBLIC AccountData Message Network)
 
 add_executable(signmultisig signmultisig.cpp)
 add_custom_command(TARGET zilliqa

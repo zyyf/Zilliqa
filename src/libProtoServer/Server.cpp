@@ -18,7 +18,10 @@
  */
 
 #include <boost/multiprecision/cpp_dec_float.hpp>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 #include <iostream>
 
 #include "Server.h"
@@ -387,8 +390,7 @@ GetDSBlockResponse Server::GetLatestDsBlock() {
 
   LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
             "BlockNum " << dsblock.GetHeader().GetBlockNum()
-                        << "  Timestamp:        "
-                        << dsblock.GetHeader().GetTimestamp().str());
+                        << "  Timestamp:        " << dsblock.GetTimestamp());
 
   // Convert DSBlock to proto.
   ProtoDSBlock protoDSBlock;
@@ -408,8 +410,7 @@ GetTxBlockResponse Server::GetLatestTxBlock() {
 
   LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
             "BlockNum " << txblock.GetHeader().GetBlockNum()
-                        << "  Timestamp:        "
-                        << txblock.GetHeader().GetTimestamp().str());
+                        << "  Timestamp:        " << txblock.GetTimestamp());
 
   // Convert txblock to proto.
   ProtoTxBlock protoTxBlock;
@@ -441,10 +442,10 @@ GetBalanceResponse Server::GetBalance(ProtoAddress& protoAddress) {
     const Account* account = AccountStore::GetInstance().GetAccount(addr);
 
     if (account != nullptr) {
-      boost::multiprecision::uint256_t balance = account->GetBalance();
+      boost::multiprecision::uint128_t balance = account->GetBalance();
       ret.set_balance(balance.str());
 
-      boost::multiprecision::uint256_t nonce = account->GetNonce();
+      boost::multiprecision::uint128_t nonce = account->GetNonce();
       ret.set_nonce(nonce.str());
 
       LOG_GENERAL(INFO, "balance " << balance.str() << " nonce: "
@@ -620,10 +621,10 @@ GetSmartContractResponse Server::GetSmartContracts(ProtoAddress& protoAddress) {
       return ret;
     }
 
-    boost::multiprecision::uint256_t nonce = account->GetNonce();
+    uint64_t nonce = account->GetNonce();
     //[TODO] find out a more efficient way (using storage)
 
-    for (boost::multiprecision::uint256_t i = 0; i < nonce; i++) {
+    for (uint64_t i = 0; i < nonce; i++) {
       Address contractAddr = Account::GetAddressForContract(addr, i);
       const Account* contractAccount =
           AccountStore::GetInstance().GetAccount(contractAddr);
@@ -743,7 +744,7 @@ DoubleResponse Server::GetTransactionRate() {
   uint64_t refBlockNum =
       m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum();
 
-  boost::multiprecision::uint256_t refTimeTx = 0;
+  uint64_t refTimeTx = 0;
 
   if (refBlockNum <= REF_BLOCK_DIFF) {
     if (refBlockNum <= 1) {
@@ -764,7 +765,7 @@ DoubleResponse Server::GetTransactionRate() {
 
   try {
     TxBlock tx = m_mediator.m_txBlockChain.GetBlock(refBlockNum);
-    refTimeTx = tx.GetHeader().GetTimestamp();
+    refTimeTx = tx.GetTimestamp();
   } catch (const char* msg) {
     if (string(msg) == "Blocknumber Absent") {
       LOG_GENERAL(INFO, "Error in fetching ref block");
@@ -773,15 +774,13 @@ DoubleResponse Server::GetTransactionRate() {
     return ret;
   }
 
-  boost::multiprecision::uint256_t TimeDiff =
-      m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetTimestamp() -
-      refTimeTx;
+  uint64_t TimeDiff =
+      m_mediator.m_txBlockChain.GetLastBlock().GetTimestamp() - refTimeTx;
 
   if (TimeDiff == 0 || refTimeTx == 0) {
     // something went wrong
     LOG_GENERAL(INFO, "TimeDiff or refTimeTx = 0 \n TimeDiff:"
-                          << TimeDiff.str()
-                          << " refTimeTx:" << refTimeTx.str());
+                          << TimeDiff << " refTimeTx:" << refTimeTx);
     return ret;
   }
 
@@ -806,7 +805,7 @@ DoubleResponse Server::GetDSBlockRate() {
     try {
       // Refernce time chosen to be the first block's timestamp
       DSBlock dsb = m_mediator.m_dsBlockChain.GetBlock(1);
-      m_StartTimeDs = dsb.GetHeader().GetTimestamp();
+      m_StartTimeDs = dsb.GetTimestamp();
     } catch (const char* msg) {
       if (string(msg) == "Blocknumber Absent") {
         LOG_GENERAL(INFO, "No DSBlock has been mined yet");
@@ -816,9 +815,8 @@ DoubleResponse Server::GetDSBlockRate() {
     }
   }
 
-  boost::multiprecision::uint256_t TimeDiff =
-      m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetTimestamp() -
-      m_StartTimeDs;
+  uint64_t TimeDiff =
+      m_mediator.m_dsBlockChain.GetLastBlock().GetTimestamp() - m_StartTimeDs;
 
   if (TimeDiff == 0) {
     LOG_GENERAL(INFO, "Wait till the second block");
@@ -847,7 +845,7 @@ DoubleResponse Server::GetTxBlockRate() {
     try {
       // Reference Time chosen to be first block's timestamp
       TxBlock txb = m_mediator.m_txBlockChain.GetBlock(1);
-      m_StartTimeTx = txb.GetHeader().GetTimestamp();
+      m_StartTimeTx = txb.GetTimestamp();
     } catch (const char* msg) {
       if (string(msg) == "Blocknumber Absent") {
         LOG_GENERAL(INFO, "No TxBlock has been mined yet");
@@ -857,9 +855,8 @@ DoubleResponse Server::GetTxBlockRate() {
     }
   }
 
-  boost::multiprecision::uint256_t TimeDiff =
-      m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetTimestamp() -
-      m_StartTimeTx;
+  uint64_t TimeDiff =
+      m_mediator.m_txBlockChain.GetLastBlock().GetTimestamp() - m_StartTimeTx;
 
   if (TimeDiff == 0) {
     LOG_GENERAL(INFO, "Wait till the second block");
@@ -868,7 +865,7 @@ DoubleResponse Server::GetTxBlockRate() {
 
   // To convert from microSeconds to seconds
   numTx = numTx * 1000000;
-  boost::multiprecision::cpp_dec_float_50 TimeDiffFloat(TimeDiff.str());
+  boost::multiprecision::cpp_dec_float_50 TimeDiffFloat(to_string(TimeDiff));
   boost::multiprecision::cpp_dec_float_50 ans = numTx / TimeDiffFloat;
 
   ret.set_result(ans.convert_to<double>());

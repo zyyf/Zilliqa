@@ -68,9 +68,14 @@ target_include_directories(Test_ShardSizeCalculator PUBLIC ${CMAKE_SOURCE_DIR}/s
 target_link_libraries (Test_ShardSizeCalculator PUBLIC Utils TestUtils)
 add_test(NAME Test_ShardSizeCalculator COMMAND Test_ShardSizeCalculator)
 
+add_executable(Test_SWInfo Test_SWInfo.cpp)
+target_include_directories(Test_SWInfo PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests)
+target_link_libraries (Test_SWInfo PUBLIC Utils TestUtils)
+add_test(NAME Test_SWInfo COMMAND Test_SWInfo)
+
 add_executable(Test_UpgradeManager Test_UpgradeManager.cpp)
 target_include_directories(Test_UpgradeManager PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries (Test_UpgradeManager PUBLIC Utils curl boost_system crypto AccountData Message)
+target_link_libraries (Test_UpgradeManager PUBLIC Utils curl OpenSSL::Crypto AccountData Message)
 
 # The network is unstable between Travis server & GitHub, thus disable Test_UpgradeManager to avoid potential Travis build failed.
 #add_test(NAME Test_UpgradeManager COMMAND Test_UpgradeManager)

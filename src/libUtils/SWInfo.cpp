@@ -18,26 +18,31 @@
  */
 
 #include "SWInfo.h"
+#include "libMessage/MessengerSWInfo.h"
 #include "libUtils/Logger.h"
 
 using namespace std;
 
 SWInfo::SWInfo()
-    : m_major(0), m_minor(0), m_fix(0), m_upgradeDS(0), m_commit(0) {}
+    : m_majorVersion(0),
+      m_minorVersion(0),
+      m_fixVersion(0),
+      m_upgradeDS(0),
+      m_commit(0) {}
 
-SWInfo::SWInfo(const uint32_t& major, const uint32_t& minor,
-               const uint32_t& fix, const uint64_t& upgradeDS,
+SWInfo::SWInfo(const uint32_t& majorVersion, const uint32_t& minorVersion,
+               const uint32_t& fixVersion, const uint64_t& upgradeDS,
                const uint32_t& commit)
-    : m_major(major),
-      m_minor(minor),
-      m_fix(fix),
+    : m_majorVersion(majorVersion),
+      m_minorVersion(minorVersion),
+      m_fixVersion(fixVersion),
       m_upgradeDS(upgradeDS),
       m_commit(commit) {}
 
 SWInfo::SWInfo(const SWInfo& src)
-    : m_major(src.m_major),
-      m_minor(src.m_minor),
-      m_fix(src.m_fix),
+    : m_majorVersion(src.m_majorVersion),
+      m_minorVersion(src.m_minorVersion),
+      m_fixVersion(src.m_fixVersion),
       m_upgradeDS(src.m_upgradeDS),
       m_commit(src.m_commit) {}
 
@@ -48,19 +53,17 @@ unsigned int SWInfo::Serialize(std::vector<unsigned char>& dst,
                                unsigned int offset) const {
   LOG_MARKER();
 
-  unsigned int size_remaining = dst.size() - offset;
-
-  if (size_remaining < SIZE) {
-    dst.resize(SIZE + offset);
+  if ((offset + SIZE) > dst.size()) {
+    dst.resize(offset + SIZE);
   }
 
   unsigned int curOffset = offset;
 
-  SetNumber<uint32_t>(dst, curOffset, m_major, sizeof(uint32_t));
+  SetNumber<uint32_t>(dst, curOffset, m_majorVersion, sizeof(uint32_t));
   curOffset += sizeof(uint32_t);
-  SetNumber<uint32_t>(dst, curOffset, m_minor, sizeof(uint32_t));
+  SetNumber<uint32_t>(dst, curOffset, m_minorVersion, sizeof(uint32_t));
   curOffset += sizeof(uint32_t);
-  SetNumber<uint32_t>(dst, curOffset, m_fix, sizeof(uint32_t));
+  SetNumber<uint32_t>(dst, curOffset, m_fixVersion, sizeof(uint32_t));
   curOffset += sizeof(uint32_t);
   SetNumber<uint64_t>(dst, curOffset, m_upgradeDS, sizeof(uint64_t));
   curOffset += sizeof(uint64_t);
@@ -78,11 +81,11 @@ int SWInfo::Deserialize(const std::vector<unsigned char>& src,
   unsigned int curOffset = offset;
 
   try {
-    m_major = GetNumber<uint32_t>(src, curOffset, sizeof(uint32_t));
+    m_majorVersion = GetNumber<uint32_t>(src, curOffset, sizeof(uint32_t));
     curOffset += sizeof(uint32_t);
-    m_minor = GetNumber<uint32_t>(src, curOffset, sizeof(uint32_t));
+    m_minorVersion = GetNumber<uint32_t>(src, curOffset, sizeof(uint32_t));
     curOffset += sizeof(uint32_t);
-    m_fix = GetNumber<uint32_t>(src, curOffset, sizeof(uint32_t));
+    m_fixVersion = GetNumber<uint32_t>(src, curOffset, sizeof(uint32_t));
     curOffset += sizeof(uint32_t);
     m_upgradeDS = GetNumber<uint64_t>(src, curOffset, sizeof(uint64_t));
     curOffset += sizeof(uint64_t);
@@ -98,8 +101,9 @@ int SWInfo::Deserialize(const std::vector<unsigned char>& src,
 
 /// Less-than comparison operator.
 bool SWInfo::operator<(const SWInfo& r) const {
-  return tie(m_major, m_minor, m_fix, m_upgradeDS, m_commit) <
-         tie(r.m_major, r.m_minor, r.m_fix, r.m_upgradeDS, r.m_commit);
+  return tie(m_majorVersion, m_minorVersion, m_fixVersion, m_upgradeDS,
+             m_commit) < tie(r.m_majorVersion, r.m_minorVersion, r.m_fixVersion,
+                             r.m_upgradeDS, r.m_commit);
 }
 
 /// Greater-than comparison operator.
@@ -107,11 +111,17 @@ bool SWInfo::operator>(const SWInfo& r) const { return r < *this; }
 
 /// Equality operator.
 bool SWInfo::operator==(const SWInfo& r) const {
-  return tie(m_major, m_minor, m_fix, m_upgradeDS, m_commit) ==
-         tie(r.m_major, r.m_minor, r.m_fix, r.m_upgradeDS, r.m_commit);
+  return tie(m_majorVersion, m_minorVersion, m_fixVersion, m_upgradeDS,
+             m_commit) == tie(r.m_majorVersion, r.m_minorVersion,
+                              r.m_fixVersion, r.m_upgradeDS, r.m_commit);
 }
 
 /// Unequality operator.
 bool SWInfo::operator!=(const SWInfo& r) const { return !(*this == r); }
 
+/// Getters.
+const uint32_t& SWInfo::GetMajorVersion() const { return m_majorVersion; };
+const uint32_t& SWInfo::GetMinorVersion() const { return m_minorVersion; };
+const uint32_t& SWInfo::GetFixVersion() const { return m_fixVersion; };
 const uint64_t& SWInfo::GetUpgradeDS() const { return m_upgradeDS; };
+const uint32_t& SWInfo::GetCommit() const { return m_commit; };

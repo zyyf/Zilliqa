@@ -20,7 +20,10 @@
 #ifndef __FALLBACKBLOCK_H__
 #define __FALLBACKBLOCK_H__
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 
 #include "BlockBase.h"
 #include "common/Constants.h"
@@ -44,7 +47,6 @@ class FallbackBlock : public BlockBase {
 
   /// Constructor with specified fallback block parameters.
   FallbackBlock(const FallbackBlockHeader& header, CoSignatures&& cosigs);
-  FallbackBlock(const FallbackBlockHeader& header);
 
   /// Implements the Serialize function inherited from Serializable.
   bool Serialize(std::vector<unsigned char>& dst, unsigned int offset) const;

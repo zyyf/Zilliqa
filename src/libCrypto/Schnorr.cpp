@@ -67,6 +67,7 @@ shared_ptr<BIGNUM> BIGNUMSerialize::GetNumber(const vector<unsigned char>& src,
   if (size <= 0) {
     LOG_GENERAL(WARNING, "assertion failed (" << __FILE__ << ":" << __LINE__
                                               << ": " << __FUNCTION__ << ")");
+    return nullptr;
   }
 
   lock_guard<mutex> g(m_mutexBIGNUM);
@@ -90,6 +91,7 @@ void BIGNUMSerialize::SetNumber(vector<unsigned char>& dst, unsigned int offset,
   if (size <= 0) {
     LOG_GENERAL(WARNING, "assertion failed (" << __FILE__ << ":" << __LINE__
                                               << ": " << __FUNCTION__ << ")");
+    return;
   }
 
   lock_guard<mutex> g(m_mutexBIGNUM);
@@ -99,10 +101,8 @@ void BIGNUMSerialize::SetNumber(vector<unsigned char>& dst, unsigned int offset,
   // if (actual_bn_size > 0)
   {
     if (actual_bn_size <= static_cast<int>(size)) {
-      const unsigned int length_available = dst.size() - offset;
-
-      if (length_available < size) {
-        dst.resize(dst.size() + size - length_available);
+      if (offset + size > dst.size()) {
+        dst.resize(offset + size);
       }
 
       // Pad with zeroes as needed
@@ -137,6 +137,7 @@ shared_ptr<EC_POINT> ECPOINTSerialize::GetNumber(
     if (ctx == nullptr) {
       LOG_GENERAL(WARNING, "Memory allocation failure");
       // throw exception();
+      return nullptr;
     }
 
     EC_POINT* ret =
@@ -160,6 +161,7 @@ void ECPOINTSerialize::SetNumber(vector<unsigned char>& dst,
     if (ctx == nullptr) {
       LOG_GENERAL(WARNING, "Memory allocation failure");
       // throw exception();
+      return;
     }
 
     bnvalue.reset(
@@ -170,6 +172,7 @@ void ECPOINTSerialize::SetNumber(vector<unsigned char>& dst,
     if (bnvalue == nullptr) {
       LOG_GENERAL(WARNING, "Memory allocation failure");
       // throw exception();
+      return;
     }
   }
 
@@ -281,8 +284,10 @@ PubKey::PubKey(const PrivKey& privkey)
   if (m_P == nullptr) {
     LOG_GENERAL(WARNING, "Memory allocation failure");
     // throw exception();
+    return;
   } else if (!privkey.Initialized()) {
     LOG_GENERAL(WARNING, "Private key is not initialized");
+    return;
   } else {
     const Curve& curve = Schnorr::GetInstance().GetCurve();
 
@@ -317,6 +322,7 @@ PubKey::PubKey(const PubKey& src)
   if (m_P == nullptr) {
     LOG_GENERAL(WARNING, "Memory allocation failure");
     // throw exception();
+    return;
   } else if (src.m_P == nullptr) {
     LOG_GENERAL(WARNING, "src (ec point) is null in pub key construct.");
     // throw exception();
@@ -433,8 +439,9 @@ Signature::Signature()
   if ((m_r == nullptr) || (m_s == nullptr)) {
     LOG_GENERAL(WARNING, "Memory allocation failure");
     // throw exception();
+  } else {
+    m_initialized = true;
   }
-  m_initialized = true;
 }
 
 Signature::Signature(const vector<unsigned char>& src, unsigned int offset) {

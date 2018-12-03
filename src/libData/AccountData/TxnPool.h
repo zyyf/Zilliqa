@@ -26,7 +26,7 @@
 struct TxnPool {
   struct PubKeyNonceHash {
     std::size_t operator()(
-        const std::pair<PubKey, boost::multiprecision::uint256_t>& p) const {
+        const std::pair<PubKey, boost::multiprecision::uint128_t>& p) const {
       std::size_t seed = 0;
       boost::hash_combine(seed, std::string(p.first));
       boost::hash_combine(seed, p.second.convert_to<std::string>());
@@ -36,12 +36,10 @@ struct TxnPool {
   };
 
   std::unordered_map<TxnHash, Transaction> HashIndex;
-  std::map<boost::multiprecision::uint256_t,
-           std::unordered_map<TxnHash, Transaction>,
-           std::greater<boost::multiprecision::uint256_t>>
+  std::map<boost::multiprecision::uint128_t, std::map<TxnHash, Transaction>,
+           std::greater<boost::multiprecision::uint128_t>>
       GasIndex;
-  std::unordered_map<std::pair<PubKey, boost::multiprecision::uint256_t>,
-                     Transaction, PubKeyNonceHash>
+  std::unordered_map<std::pair<PubKey, uint64_t>, Transaction, PubKeyNonceHash>
       NonceIndex;
 
   void clear() {
@@ -50,8 +48,19 @@ struct TxnPool {
     NonceIndex.clear();
   }
 
+  unsigned int size() { return HashIndex.size(); }
+
   bool exist(const TxnHash& th) {
     return HashIndex.find(th) != HashIndex.end();
+  }
+
+  bool get(const TxnHash& th, Transaction& t) {
+    if (!exist(th)) {
+      return false;
+    }
+    t = HashIndex.at(th);
+
+    return true;
   }
 
   bool insert(const Transaction& t) {
@@ -61,7 +70,9 @@ struct TxnPool {
 
     auto searchNonce = NonceIndex.find({t.GetSenderPubKey(), t.GetNonce()});
     if (searchNonce != NonceIndex.end()) {
-      if (t.GetGasPrice() > searchNonce->second.GetGasPrice()) {
+      if ((t.GetGasPrice() > searchNonce->second.GetGasPrice()) ||
+          (t.GetGasPrice() == searchNonce->second.GetGasPrice() &&
+           t.GetTranID() < searchNonce->second.GetTranID())) {
         // erase from HashIdxTxns
         auto searchHash = HashIndex.find(searchNonce->second.GetTranID());
         if (searchHash != HashIndex.end()) {

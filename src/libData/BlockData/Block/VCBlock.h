@@ -21,7 +21,10 @@
 #define __VCBLOCK_H__
 
 #include <array>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 
 #include "BlockBase.h"
 #include "common/Constants.h"
@@ -43,9 +46,6 @@ class VCBlock : public BlockBase {
 
   /// Constructor with specified VC block parameters.
   VCBlock(const VCBlockHeader& header, CoSignatures&& cosigs);
-
-  /// Constructor with specified VC block parameters.
-  VCBlock(const VCBlockHeader& header);
 
   /// Implements the Serialize function inherited from Serializable.
   /// Return size of serialized structure

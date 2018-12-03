@@ -31,6 +31,7 @@
 #include "libCrypto/Sha2.h"
 #include "libMediator/Mediator.h"
 #include "libMessage/Messenger.h"
+#include "libNetwork/Guard.h"
 #include "libNetwork/P2PComm.h"
 #include "libUtils/DataConversion.h"
 #include "libUtils/DetachedFunction.h"
@@ -99,6 +100,18 @@ bool DirectoryService::ViewChangeValidator(
                 "Calculated: "
                     << committeeHash << " Received: "
                     << m_pendingVCBlock->GetHeader().GetCommitteeHash());
+    return false;
+  }
+
+  BlockHash prevHash = get<BlockLinkIndex::BLOCKHASH>(
+      m_mediator.m_blocklinkchain.GetLatestBlockLink());
+
+  if (prevHash != m_pendingVCBlock->GetHeader().GetPrevHash()) {
+    LOG_GENERAL(
+        WARNING,
+        "Prev Block hash in newly received VC Block doesn't match. Calculated "
+            << prevHash << " Received"
+            << m_pendingVCBlock->GetHeader().GetPrevHash());
     return false;
   }
 
@@ -253,6 +266,27 @@ void DirectoryService::RunConsensusOnViewChange() {
   SetLastKnownGoodState();
   SetState(VIEWCHANGE_CONSENSUS_PREP);
 
+  uint64_t dsCurBlockNum =
+      m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetBlockNum();
+  uint64_t txCurBlockNum =
+      m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum();
+
+  // Note: Special check as 0 and 1 have special usage when fetching ds block
+  // and final block No need check for 1 as
+  // VCFetchLatestDSTxBlockFromLookupNodes always check for current block + 1
+  // i.e in first epoch, it will request for block 1, which means fetch latest
+  // block (including block 0)
+  if (dsCurBlockNum != 0 && txCurBlockNum != 0) {
+    VCFetchLatestDSTxBlockFromLookupNodes();
+    if (!NodeVCPrecheck()) {
+      LOG_GENERAL(WARNING,
+                  "[RDS]Failed the vc precheck. Node is lagging behind the "
+                  "whole network.");
+      RejoinAsDS();
+      return;
+    }
+  }
+
   uint16_t faultyLeaderIndex;
   m_viewChangeCounter += 1;
   if (m_viewChangeCounter == 1) {
@@ -376,7 +410,8 @@ bool DirectoryService::ComputeNewCandidateLeader(
               "Messenger::GetDSCommitteeHash failed.");
     return false;
   }
-
+  BlockHash prevHash = get<BlockLinkIndex::BLOCKHASH>(
+      m_mediator.m_blocklinkchain.GetLatestBlockLink());
   {
     lock_guard<mutex> g(m_mutexPendingVCBlock);
     // To-do: Handle exceptions.
@@ -387,13 +422,43 @@ bool DirectoryService::ComputeNewCandidateLeader(
             m_mediator.m_currentEpochNum, m_viewChangestate,
             newLeaderNetworkInfo,
             m_mediator.m_DSCommittee->at(candidateLeaderIndex).first,
-            m_viewChangeCounter, m_cumulativeFaultyLeaders, get_time_as_int(),
-            committeeHash),
+            m_viewChangeCounter, m_cumulativeFaultyLeaders, committeeHash,
+            prevHash),
         CoSignatures()));
-    m_pendingVCBlock->SetBlockHash(m_pendingVCBlock->GetHeader().GetMyHash());
   }
 
   return true;
+}
+
+bool DirectoryService::NodeVCPrecheck() {
+  LOG_MARKER();
+  {
+    lock_guard<mutex> g(m_MutexCVViewChangePrecheckBlocks);
+    m_vcPreCheckDSBlocks.clear();
+    m_vcPreCheckTxBlocks.clear();
+  }
+
+  std::unique_lock<std::mutex> cv_lk(m_MutexCVViewChangePrecheck);
+  if (cv_viewChangePrecheck.wait_for(
+          cv_lk, std::chrono::seconds(VIEWCHANGE_PRECHECK_TIME)) ==
+      std::cv_status::timeout) {
+    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
+              "Timeout while waiting for precheck. ");
+  }
+
+  {
+    lock_guard<mutex> g(m_MutexCVViewChangePrecheckBlocks);
+    if (m_vcPreCheckDSBlocks.size() == 0 && m_vcPreCheckTxBlocks.size() == 0) {
+      LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
+                "Passed precheck. ");
+      return true;
+    }
+  }
+  LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+            "Failed precheck. m_vcPreCheckDSBlocks size: "
+                << m_vcPreCheckDSBlocks.size() << " m_vcPreCheckTxBlocks size: "
+                << m_vcPreCheckTxBlocks.size());
+  return false;
 }
 
 uint32_t DirectoryService::CalculateNewLeaderIndex() {
@@ -408,11 +473,11 @@ uint32_t DirectoryService::CalculateNewLeaderIndex() {
   VCBlockSharedPtr prevVCBlockptr;
   if (CheckUseVCBlockInsteadOfDSBlock(bl, prevVCBlockptr)) {
     LOG_GENERAL(INFO,
-                "Using hash of last vc block for computing candidcate leader");
+                "Using hash of last vc block for computing candidate leader");
     sha2.Update(prevVCBlockptr->GetBlockHash().asBytes());
   } else {
     LOG_GENERAL(
-        INFO, "Using hash of last final block for computing candidcate leader");
+        INFO, "Using hash of last final block for computing candidate leader");
     sha2.Update(
         m_mediator.m_txBlockChain.GetLastBlock().GetBlockHash().asBytes());
   }
@@ -422,8 +487,14 @@ uint32_t DirectoryService::CalculateNewLeaderIndex() {
                                     sizeof(uint32_t));
   sha2.Update(vcCounterBytes);
   uint16_t lastBlockHash = DataConversion::charArrTo16Bits(sha2.Finalize());
-  uint32_t candidateLeaderIndex =
-      lastBlockHash % (m_mediator.m_DSCommittee->size());
+  uint32_t candidateLeaderIndex;
+
+  if (!GUARD_MODE) {
+    candidateLeaderIndex = lastBlockHash % m_mediator.m_DSCommittee->size();
+  } else {
+    candidateLeaderIndex =
+        lastBlockHash % Guard::GetInstance().GetNumOfDSGuard();
+  }
 
   while (candidateLeaderIndex == m_consensusLeaderID) {
     LOG_GENERAL(INFO,
@@ -431,7 +502,15 @@ uint32_t DirectoryService::CalculateNewLeaderIndex() {
                     << candidateLeaderIndex);
     sha2.Update(sha2.Finalize());
     lastBlockHash = DataConversion::charArrTo16Bits(sha2.Finalize());
-    candidateLeaderIndex = lastBlockHash % (m_mediator.m_DSCommittee->size());
+    if (!GUARD_MODE) {
+      candidateLeaderIndex = lastBlockHash % m_mediator.m_DSCommittee->size();
+    } else {
+      candidateLeaderIndex =
+          lastBlockHash % Guard::GetInstance().GetNumOfDSGuard();
+      LOG_GENERAL(INFO, "In Guard mode. interim candidate leader is "
+                            << candidateLeaderIndex);
+    }
+
     LOG_GENERAL(INFO, "Re-computed candidate leader is at index: "
                           << candidateLeaderIndex
                           << " VC counter: " << m_viewChangeCounter);
@@ -479,8 +558,8 @@ bool DirectoryService::RunConsensusOnViewChangeWhenCandidateLeader(
 
 #ifdef VC_TEST_VC_SUSPEND_1
   if (m_viewChangeCounter < 2) {
-    LOG_GENERAL(
-        WARNING,
+    LOG_EPOCH(
+        WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
         "I am suspending myself to test viewchange (VC_TEST_VC_SUSPEND_1)");
     return false;
   }
@@ -488,8 +567,8 @@ bool DirectoryService::RunConsensusOnViewChangeWhenCandidateLeader(
 
 #ifdef VC_TEST_VC_SUSPEND_3
   if (m_viewChangeCounter < 4) {
-    LOG_GENERAL(
-        WARNING,
+    LOG_EPOCH(
+        WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
         "I am suspending myself to test viewchange (VC_TEST_VC_SUSPEND_3)");
     return false;
   }
@@ -595,5 +674,69 @@ bool DirectoryService::RunConsensusOnViewChangeWhenNotCandidateLeader(
     return false;
   }
 
+  return true;
+}
+
+bool DirectoryService::VCFetchLatestDSTxBlockFromLookupNodes() {
+  LOG_MARKER();
+  m_mediator.m_lookup->SendMessageToRandomLookupNode(
+      ComposeVCGetDSTxBlockMessage());
+  return true;
+}
+
+vector<unsigned char> DirectoryService::ComposeVCGetDSTxBlockMessage() {
+  LOG_MARKER();
+  vector<unsigned char> getDSTxBlockMessage = {
+      MessageType::LOOKUP, LookupInstructionType::VCGETLATESTDSTXBLOCK};
+  uint64_t dslowBlockNum =
+      m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetBlockNum() + 1;
+  uint64_t txlowBlockNum =
+      m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() + 1;
+  if (!Messenger::SetLookupGetDSTxBlockFromSeed(
+          getDSTxBlockMessage, MessageOffset::BODY, dslowBlockNum, 0,
+          txlowBlockNum, 0, m_mediator.m_selfPeer.m_listenPortHost)) {
+    LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+              "Messenger::SetLookupGetDSTxBlockFromSeed failed.");
+    return {};
+  }
+  LOG_GENERAL(INFO, "Checking for new blocks. new (if any) dslowBlockNum: "
+                        << dslowBlockNum
+                        << " new (if any) txlowBlockNum: " << txlowBlockNum);
+
+  return getDSTxBlockMessage;
+}
+
+bool DirectoryService::ProcessGetDSTxBlockMessage(
+    const vector<unsigned char>& message, unsigned int offset,
+    [[gnu::unused]] const Peer& from) {
+  LOG_MARKER();
+
+  if (m_state != VIEWCHANGE_CONSENSUS_PREP) {
+    LOG_EPOCH(
+        WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+        "Unable to process ProcessGetDSTxBlockMessage as current state is "
+            << to_string(m_state));
+  }
+
+  lock_guard<mutex> g(m_MutexCVViewChangePrecheckBlocks);
+
+  PubKey lookupPubKey;
+  if (!Messenger::GetVCNodeSetDSTxBlockFromSeed(
+          message, offset, m_vcPreCheckDSBlocks, m_vcPreCheckTxBlocks,
+          lookupPubKey)) {
+    LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+              "Messenger::GetVCNodeSetDSTxBlockFromSeed failed.");
+    return false;
+  }
+
+  if (!m_mediator.m_lookup->VerifyLookupNode(
+          m_mediator.m_lookup->GetLookupNodes(), lookupPubKey)) {
+    LOG_EPOCH(WARNING, std::to_string(m_mediator.m_currentEpochNum).c_str(),
+              "The message sender pubkey: "
+                  << lookupPubKey << " is not in my lookup node list.");
+    return false;
+  }
+
+  cv_viewChangePrecheck.notify_all();
   return true;
 }

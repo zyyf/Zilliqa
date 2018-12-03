@@ -22,7 +22,10 @@
 #include <functional>
 #include <thread>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 #include "Node.h"
 #include "common/Constants.h"
 #include "common/Messages.h"
@@ -67,12 +70,12 @@ bool Node::ComposeMicroBlock() {
   uint8_t type = TXBLOCKTYPE::MICRO;
   uint32_t version = BLOCKVERSION::VERSION1;
   uint32_t shardId = m_myshardId;
-  uint256_t gasLimit = MICROBLOCK_GAS_LIMIT;
-  uint256_t gasUsed = m_gasUsedTotal;
-  uint256_t rewards = 0;
+  uint64_t gasLimit = MICROBLOCK_GAS_LIMIT;
+  uint64_t gasUsed = m_gasUsedTotal;
+  uint128_t rewards = 0;
   if (m_mediator.GetIsVacuousEpoch() &&
       m_mediator.m_ds->m_mode != DirectoryService::IDLE) {
-    if (!SafeMath<uint256_t>::add(m_mediator.m_ds->m_totalTxnFees,
+    if (!SafeMath<uint128_t>::add(m_mediator.m_ds->m_totalTxnFees,
                                   COINBASE_REWARD, rewards)) {
       LOG_GENERAL(WARNING, "rewards addition unsafe!");
     }
@@ -82,7 +85,6 @@ bool Node::ComposeMicroBlock() {
   BlockHash prevHash =
       m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetMyHash();
 
-  uint256_t timestamp = get_time_as_int();
   TxnHash txRootHash, txReceiptHash;
   uint32_t numTxs = 0;
   const PubKey& minerPubKey = m_mediator.m_selfKey.second;
@@ -112,37 +114,42 @@ bool Node::ComposeMicroBlock() {
   {
     lock_guard<mutex> g(m_mutexProcessedTransactions);
 
-    auto& processedTransactions =
-        m_processedTransactions[m_mediator.m_currentEpochNum];
-
     txRootHash = ComputeRoot(m_TxnOrder);
 
-    numTxs = processedTransactions.size();
+    numTxs = t_processedTransactions.size();
     if (numTxs != m_TxnOrder.size()) {
       LOG_GENERAL(FATAL, "Num txns and Order size not same "
                              << " numTxs " << numTxs << " m_TxnOrder "
                              << m_TxnOrder.size());
     }
     tranHashes = m_TxnOrder;
-    m_TxnOrder.clear();
 
     if (!TransactionWithReceipt::ComputeTransactionReceiptsHash(
-            tranHashes, processedTransactions, txReceiptHash)) {
+            tranHashes, t_processedTransactions, txReceiptHash)) {
       LOG_GENERAL(WARNING, "Cannot compute transaction receipts hash");
       return false;
     }
   }
+
+#ifdef DM_TEST_DM_BAD_MB_ANNOUNCE
+  if (m_mediator.m_ds->m_viewChangeCounter == 0 &&
+      m_mediator.m_ds->m_mode != DirectoryService::Mode::IDLE) {
+    LOG_GENERAL(WARNING,
+                "Leader compose wrong state root (DM_TEST_DM_BAD_ANNOUNCE)");
+    tranHashes.clear();
+  }
+#endif  // DM_TEST_DM_BAD_MB_ANNOUNCE
+
   LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
             "Creating new micro block.")
   m_microblock.reset(new MicroBlock(
       MicroBlockHeader(
           type, version, shardId, gasLimit, gasUsed, rewards, prevHash,
-          m_mediator.m_currentEpochNum, timestamp,
+          m_mediator.m_currentEpochNum,
           {txRootHash, stateDeltaHash, txReceiptHash}, numTxs, minerPubKey,
           m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetBlockNum(),
           committeeHash),
       tranHashes, CoSignatures()));
-  m_microblock->SetBlockHash(m_microblock->GetHeader().GetMyHash());
 
   LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
             "Micro block proposed with "
@@ -169,21 +176,12 @@ bool Node::OnNodeMissingTxns(const std::vector<unsigned char>& errorMsg,
     LOG_GENERAL(WARNING, "Malformed Message");
     return false;
   }
-  BlockHash temp_blockHash = m_microblock->GetHeader().GetMyHash();
-  if (temp_blockHash != m_microblock->GetBlockHash()) {
-    LOG_GENERAL(WARNING,
-                "Block Hash in Newly received DS Block doesn't match. "
-                "Calculated: "
-                    << temp_blockHash
-                    << " Received: " << m_microblock->GetBlockHash().hex());
-    return false;
-  }
 
   uint32_t numOfAbsentHashes =
       Serializable::GetNumber<uint32_t>(errorMsg, offset, sizeof(uint32_t));
   offset += sizeof(uint32_t);
 
-  uint64_t blockNum =
+  uint64_t epochNum =
       Serializable::GetNumber<uint64_t>(errorMsg, offset, sizeof(uint64_t));
   offset += sizeof(uint64_t);
 
@@ -206,34 +204,34 @@ bool Node::OnNodeMissingTxns(const std::vector<unsigned char>& errorMsg,
 
   lock_guard<mutex> g(m_mutexProcessedTransactions);
 
-  auto& processedTransactions = m_processedTransactions[blockNum];
-
   unsigned int cur_offset = 0;
   vector<unsigned char> tx_message = {MessageType::NODE,
                                       NodeInstructionType::SUBMITTRANSACTION};
   cur_offset += MessageOffset::BODY;
   tx_message.push_back(SUBMITTRANSACTIONTYPE::MISSINGTXN);
   cur_offset += MessageOffset::INST;
-  Serializable::SetNumber<uint64_t>(tx_message, cur_offset, blockNum,
+  Serializable::SetNumber<uint64_t>(tx_message, cur_offset, epochNum,
                                     sizeof(uint64_t));
   cur_offset += sizeof(uint64_t);
 
   std::vector<Transaction> txns;
+
+  const std::unordered_map<TxnHash, TransactionWithReceipt>&
+      processedTransactions = (epochNum == m_mediator.m_currentEpochNum)
+                                  ? t_processedTransactions
+                                  : m_processedTransactions[epochNum];
+
   for (uint32_t i = 0; i < numOfAbsentHashes; i++) {
     // LOG_GENERAL(INFO, "Peer " << from << " : " << portNo << " missing txn "
     // << missingTransactions[i])
-
-    Transaction t;
-
-    if (processedTransactions.find(missingTransactions[i]) !=
-        processedTransactions.end()) {
-      t = processedTransactions[missingTransactions[i]].GetTransaction();
+    auto found = processedTransactions.find(missingTransactions[i]);
+    if (found != processedTransactions.end()) {
+      txns.push_back(found->second.GetTransaction());
     } else {
       LOG_GENERAL(INFO, "Leader unable to find txn proposed in microblock "
                             << missingTransactions[i]);
       continue;
     }
-    txns.push_back(t);
   }
 
   if (!Messenger::SetTransactionArray(tx_message, cur_offset, txns)) {
@@ -284,8 +282,15 @@ void Node::ProcessTransactionWhenShardLeader() {
 
   lock_guard<mutex> g(m_mutexCreatedTransactions);
 
-  auto findOneFromAddrNonceTxnMap = [this](Transaction& t) -> bool {
-    for (auto it = m_addrNonceTxnMap.begin(); it != m_addrNonceTxnMap.end();
+  t_createdTxns = m_createdTxns;
+  map<Address, map<uint64_t, Transaction>> t_addrNonceTxnMap;
+  t_processedTransactions.clear();
+  m_TxnOrder.clear();
+
+  auto findOneFromAddrNonceTxnMap =
+      [](Transaction& t,
+         map<Address, map<uint64_t, Transaction>>& t_addrNonceTxnMap) -> bool {
+    for (auto it = t_addrNonceTxnMap.begin(); it != t_addrNonceTxnMap.end();
          it++) {
       if (it->second.begin()->first ==
           AccountStore::GetInstance().GetNonceTemp(it->first) + 1) {
@@ -293,7 +298,7 @@ void Node::ProcessTransactionWhenShardLeader() {
         it->second.erase(it->second.begin());
 
         if (it->second.empty()) {
-          m_addrNonceTxnMap.erase(it);
+          t_addrNonceTxnMap.erase(it);
         }
         return true;
       }
@@ -302,14 +307,13 @@ void Node::ProcessTransactionWhenShardLeader() {
   };
 
   auto appendOne = [this](const Transaction& t, const TransactionReceipt& tr) {
-    LOG_MARKER();
-    lock_guard<mutex> g(m_mutexProcessedTransactions);
-    auto& processedTransactions =
-        m_processedTransactions[m_mediator.m_currentEpochNum];
-    processedTransactions.insert(
+    t_processedTransactions.insert(
         make_pair(t.GetTranID(), TransactionWithReceipt(t, tr)));
     m_TxnOrder.push_back(t.GetTranID());
   };
+
+  m_gasUsedTotal = 0;
+  m_txnFees = 0;
 
   while (m_gasUsedTotal < MICROBLOCK_GAS_LIMIT) {
     Transaction t;
@@ -317,25 +321,25 @@ void Node::ProcessTransactionWhenShardLeader() {
 
     // check m_addrNonceTxnMap contains any txn meets right nonce,
     // if contains, process it
-    if (findOneFromAddrNonceTxnMap(t)) {
+    if (findOneFromAddrNonceTxnMap(t, t_addrNonceTxnMap)) {
       // check whether m_createdTransaction have transaction with same Addr and
       // nonce if has and with larger gasPrice then replace with that one.
       // (*optional step)
-      m_createdTxns.findSameNonceButHigherGas(t);
+      t_createdTxns.findSameNonceButHigherGas(t);
 
       if (m_mediator.m_validator->CheckCreatedTransaction(t, tr)) {
-        if (!SafeMath<uint256_t>::add(m_gasUsedTotal, tr.GetCumGas(),
-                                      m_gasUsedTotal)) {
+        if (!SafeMath<uint64_t>::add(m_gasUsedTotal, tr.GetCumGas(),
+                                     m_gasUsedTotal)) {
           LOG_GENERAL(WARNING, "m_gasUsedTotal addition unsafe!");
           break;
         }
-        uint256_t txnFee;
-        if (!SafeMath<uint256_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
+        uint128_t txnFee;
+        if (!SafeMath<uint128_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
                                       txnFee)) {
           LOG_GENERAL(WARNING, "txnFee multiplication unsafe!");
           continue;
         }
-        if (!SafeMath<uint256_t>::add(m_txnFees, txnFee, m_txnFees)) {
+        if (!SafeMath<uint128_t>::add(m_txnFees, txnFee, m_txnFees)) {
           LOG_GENERAL(WARNING, "m_txnFees addition unsafe!");
           break;
         }
@@ -345,7 +349,7 @@ void Node::ProcessTransactionWhenShardLeader() {
       }
     }
     // if no txn in u_map meet right nonce process new come-in transactions
-    else if (m_createdTxns.findOne(t)) {
+    else if (t_createdTxns.findOne(t)) {
       // LOG_GENERAL(INFO, "findOneFromCreated");
 
       Address senderAddr = t.GetSenderAddr();
@@ -353,13 +357,14 @@ void Node::ProcessTransactionWhenShardLeader() {
       // m_addrNonceTxnMap
       if (t.GetNonce() >
           AccountStore::GetInstance().GetNonceTemp(senderAddr) + 1) {
-        // LOG_GENERAL(INFO,
-        //             "High nonce: "
-        //                 << t.GetNonce() << " cur sender nonce: "
-        //                 << AccountStore::GetInstance().GetNonceTemp(
-        //                        senderAddr));
-        auto it1 = m_addrNonceTxnMap.find(senderAddr);
-        if (it1 != m_addrNonceTxnMap.end()) {
+        // LOG_GENERAL(INFO, "High nonce: "
+        //                     << t.GetNonce() << " cur sender " <<
+        //                     senderAddr.hex()
+        //                     << " nonce: "
+        //                     <<
+        //                     AccountStore::GetInstance().GetNonceTemp(senderAddr));
+        auto it1 = t_addrNonceTxnMap.find(senderAddr);
+        if (it1 != t_addrNonceTxnMap.end()) {
           auto it2 = it1->second.find(t.GetNonce());
           if (it2 != it1->second.end()) {
             // found the txn with same addr and same nonce
@@ -370,7 +375,7 @@ void Node::ProcessTransactionWhenShardLeader() {
             continue;
           }
         }
-        m_addrNonceTxnMap[senderAddr].insert({t.GetNonce(), t});
+        t_addrNonceTxnMap[senderAddr].insert({t.GetNonce(), t});
       }
       // if nonce too small, ignore it
       else if (t.GetNonce() <
@@ -378,24 +383,24 @@ void Node::ProcessTransactionWhenShardLeader() {
         // LOG_GENERAL(INFO,
         //             "Nonce too small"
         //                 << " Expected "
-        //                 << AccountStore::GetInstance().GetNonceTemp(
-        //                        senderAddr)
+        //                 <<
+        //                 AccountStore::GetInstance().GetNonceTemp(senderAddr)
         //                 << " Found " << t.GetNonce());
       }
       // if nonce correct, process it
       else if (m_mediator.m_validator->CheckCreatedTransaction(t, tr)) {
-        if (!SafeMath<uint256_t>::add(m_gasUsedTotal, tr.GetCumGas(),
-                                      m_gasUsedTotal)) {
+        if (!SafeMath<uint64_t>::add(m_gasUsedTotal, tr.GetCumGas(),
+                                     m_gasUsedTotal)) {
           LOG_GENERAL(WARNING, "m_gasUsedTotal addition unsafe!");
           break;
         }
-        uint256_t txnFee;
-        if (!SafeMath<uint256_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
+        uint128_t txnFee;
+        if (!SafeMath<uint128_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
                                       txnFee)) {
           LOG_GENERAL(WARNING, "txnFee multiplication unsafe!");
           continue;
         }
-        if (!SafeMath<uint256_t>::add(m_txnFees, txnFee, m_txnFees)) {
+        if (!SafeMath<uint128_t>::add(m_txnFees, txnFee, m_txnFees)) {
           LOG_GENERAL(WARNING, "m_txnFees addition unsafe!");
           break;
         }
@@ -405,6 +410,12 @@ void Node::ProcessTransactionWhenShardLeader() {
       }
     } else {
       break;
+    }
+  }
+  // Put txns in map back into pool
+  for (const auto& kv : t_addrNonceTxnMap) {
+    for (const auto& nonceTxn : kv.second) {
+      t_createdTxns.insert(nonceTxn.second);
     }
   }
 }
@@ -430,18 +441,42 @@ bool Node::ProcessTransactionWhenShardBackup(
   return VerifyTxnsOrdering(tranHashes);
 }
 
+void Node::UpdateProcessedTransactions() {
+  LOG_MARKER();
+
+  {
+    lock_guard<mutex> g(m_mutexCreatedTransactions);
+    m_createdTxns = std::move(t_createdTxns);
+    t_createdTxns.clear();
+  }
+
+  {
+    lock_guard<mutex> g(m_mutexProcessedTransactions);
+    m_processedTransactions[(m_mediator.m_ds->m_mode ==
+                             DirectoryService::Mode::IDLE)
+                                ? m_mediator.m_currentEpochNum
+                                : m_mediator.m_txBlockChain.GetLastBlock()
+                                      .GetHeader()
+                                      .GetBlockNum()] =
+        std::move(t_processedTransactions);
+    t_processedTransactions.clear();
+  }
+}
+
 bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
   LOG_MARKER();
 
-  TxnPool t_createdTxns = m_createdTxns;
-  std::unordered_map<Address,
-                     std::map<boost::multiprecision::uint256_t, Transaction>>
-      t_addrNonceTxnMap = m_addrNonceTxnMap;
+  lock_guard<mutex> g(m_mutexCreatedTransactions);
+
+  t_createdTxns = m_createdTxns;
   vector<TxnHash> t_tranHashes;
-  std::unordered_map<TxnHash, TransactionWithReceipt> t_processedTransactions;
+  map<Address, map<uint64_t, Transaction>> t_addrNonceTxnMap;
+  t_processedTransactions.clear();
 
   auto findOneFromAddrNonceTxnMap =
-      [&t_addrNonceTxnMap](Transaction& t) -> bool {
+      [](Transaction& t,
+         std::map<Address, map<uint64_t, Transaction>>& t_addrNonceTxnMap)
+      -> bool {
     for (auto it = t_addrNonceTxnMap.begin(); it != t_addrNonceTxnMap.end();
          it++) {
       if (it->second.begin()->first ==
@@ -458,8 +493,8 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
     return false;
   };
 
-  auto appendOne = [&t_tranHashes, &t_processedTransactions](
-                       const Transaction& t, const TransactionReceipt& tr) {
+  auto appendOne = [this, &t_tranHashes](const Transaction& t,
+                                         const TransactionReceipt& tr) {
     t_tranHashes.emplace_back(t.GetTranID());
     t_processedTransactions.insert(
         make_pair(t.GetTranID(), TransactionWithReceipt(t, tr)));
@@ -474,25 +509,25 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
 
     // check t_addrNonceTxnMap contains any txn meets right nonce,
     // if contains, process it
-    if (findOneFromAddrNonceTxnMap(t)) {
+    if (findOneFromAddrNonceTxnMap(t, t_addrNonceTxnMap)) {
       // check whether m_createdTransaction have transaction with same Addr and
       // nonce if has and with larger gasPrice then replace with that one.
       // (*optional step)
       t_createdTxns.findSameNonceButHigherGas(t);
 
       if (m_mediator.m_validator->CheckCreatedTransaction(t, tr)) {
-        if (!SafeMath<uint256_t>::add(m_gasUsedTotal, tr.GetCumGas(),
-                                      m_gasUsedTotal)) {
+        if (!SafeMath<uint64_t>::add(m_gasUsedTotal, tr.GetCumGas(),
+                                     m_gasUsedTotal)) {
           LOG_GENERAL(WARNING, "m_gasUsedTotal addition unsafe!");
           break;
         }
-        uint256_t txnFee;
-        if (!SafeMath<uint256_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
+        uint128_t txnFee;
+        if (!SafeMath<uint128_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
                                       txnFee)) {
           LOG_GENERAL(WARNING, "txnFee multiplication unsafe!");
           continue;
         }
-        if (!SafeMath<uint256_t>::add(m_txnFees, txnFee, m_txnFees)) {
+        if (!SafeMath<uint128_t>::add(m_txnFees, txnFee, m_txnFees)) {
           LOG_GENERAL(WARNING, "m_txnFees addition unsafe!");
           break;
         }
@@ -527,18 +562,18 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
       }
       // if nonce correct, process it
       else if (m_mediator.m_validator->CheckCreatedTransaction(t, tr)) {
-        if (!SafeMath<uint256_t>::add(m_gasUsedTotal, tr.GetCumGas(),
-                                      m_gasUsedTotal)) {
+        if (!SafeMath<uint64_t>::add(m_gasUsedTotal, tr.GetCumGas(),
+                                     m_gasUsedTotal)) {
           LOG_GENERAL(WARNING, "m_gasUsedTotal addition overflow!");
           break;
         }
-        uint256_t txnFee;
-        if (!SafeMath<uint256_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
+        uint128_t txnFee;
+        if (!SafeMath<uint128_t>::mul(tr.GetCumGas(), t.GetGasPrice(),
                                       txnFee)) {
           LOG_GENERAL(WARNING, "txnFee multiplication overflow!");
           continue;
         }
-        if (!SafeMath<uint256_t>::add(m_txnFees, txnFee, m_txnFees)) {
+        if (!SafeMath<uint128_t>::add(m_txnFees, txnFee, m_txnFees)) {
           LOG_GENERAL(WARNING, "m_txnFees addition overflow!");
           break;
         }
@@ -549,18 +584,82 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
     }
   }
 
-  if (t_tranHashes == tranHashes) {
-    m_addrNonceTxnMap = std::move(t_addrNonceTxnMap);
-    m_createdTxns = std::move(t_createdTxns);
+  // Put remaining txns back in pool
 
-    lock_guard<mutex> g(m_mutexProcessedTransactions);
-    m_processedTransactions[m_mediator.m_currentEpochNum] =
-        std::move(t_processedTransactions);
-
-    return true;
+  for (const auto& kv : t_addrNonceTxnMap) {
+    for (const auto& nonceTxn : kv.second) {
+      t_createdTxns.insert(nonceTxn.second);
+    }
   }
 
-  return false;
+  // check for txn misorder tolerance
+  const float TXN_MISORDER_TOLERANCE =
+      (float)TXN_MISORDER_TOLERANCE_IN_PERCENT / 100.00f;
+  const uint32_t MAX_MISORDER_TXNS =
+      std::ceil(t_tranHashes.size() * TXN_MISORDER_TOLERANCE);
+
+  LOG_GENERAL(INFO, "Tolerance = " << std::fixed << std::setprecision(2)
+                                   << TXN_MISORDER_TOLERANCE << " = "
+                                   << MAX_MISORDER_TXNS << " txns.");
+
+  uint32_t orderedtxns = 0;
+  uint32_t misordertxns = 0;
+  auto leftIt = t_tranHashes.begin();
+  auto rightIt = tranHashes.begin();
+  while (leftIt != t_tranHashes.end() && rightIt != tranHashes.end()) {
+    if (*leftIt == *rightIt) {
+      orderedtxns++;
+      leftIt++;
+      rightIt++;
+    } else {
+      break;
+    }
+  }
+
+  misordertxns = t_tranHashes.size() - orderedtxns;
+
+  if (misordertxns > MAX_MISORDER_TXNS) {
+    LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+              "Failed to Verify due to bad txn ordering count "
+                  << misordertxns << " "
+                  << "exceed limit " << MAX_MISORDER_TXNS);
+
+    for (const auto& th : t_tranHashes) {
+      Transaction t;
+      if (m_createdTxns.get(th, t)) {
+        LOG_GENERAL(INFO, "Expected txn: "
+                              << t.GetTranID() << " " << t.GetSenderAddr()
+                              << " " << t.GetNonce() << " " << t.GetGasPrice());
+      }
+    }
+    for (const auto& th : tranHashes) {
+      Transaction t;
+      if (m_createdTxns.get(th, t)) {
+        LOG_GENERAL(INFO, "Received txn: "
+                              << t.GetTranID() << " " << t.GetSenderAddr()
+                              << " " << t.GetNonce() << " " << t.GetGasPrice());
+      }
+    }
+
+    return false;
+  } else {
+    // we either have all matches or have mismatches but within the tolerance.
+    LOG_GENERAL(
+        INFO, "misordertxns: " << misordertxns
+                               << ", MAX_MISORDER_TXNS: " << MAX_MISORDER_TXNS);
+    while (leftIt != t_tranHashes.end()) {
+      // remove since it was not processed.
+      t_processedTransactions.erase(*leftIt);
+      Transaction t;
+      // add since it was not processed
+      if (m_createdTxns.get(*leftIt, t)) {
+        t_createdTxns.insert(t);
+      }
+      leftIt++;
+    }
+  }
+
+  return true;
 }
 
 bool Node::RunConsensusOnMicroBlockWhenShardLeader() {
@@ -587,12 +686,8 @@ bool Node::RunConsensusOnMicroBlockWhenShardLeader() {
 
   if (!m_mediator.GetIsVacuousEpoch()) {
     ProcessTransactionWhenShardLeader();
-  } else {
-    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "Vacuous epoch: Skipping submit transactions");
+    AccountStore::GetInstance().SerializeDelta();
   }
-
-  AccountStore::GetInstance().SerializeDelta();
 
   // composed microblock stored in m_microblock
   if (!ComposeMicroBlock()) {
@@ -650,23 +745,13 @@ bool Node::RunConsensusOnMicroBlockWhenShardLeader() {
         *m_microblock, messageToCosign);
   };
 
-  if (m_mediator.m_ds->m_mode != DirectoryService::Mode::IDLE) {
-    LOG_STATE(
-        "[DSMICON]["
-        << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
-        << "]["
-        << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() +
-               1
-        << "] BGIN.");
-  } else {
-    LOG_STATE(
-        "[MICON]["
-        << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
-        << "]["
-        << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() +
-               1
-        << "] BGIN.");
-  }
+  LOG_STATE(
+      "[MICON]["
+      << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
+      << "]["
+      << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() + 1
+      << "] BGIN.");
+
   cl->StartConsensus(announcementGeneratorFunc, BROADCAST_GOSSIP_MODE);
 
   return true;
@@ -746,29 +831,10 @@ bool Node::RunConsensusOnMicroBlock() {
 
   SetState(MICROBLOCK_CONSENSUS_PREP);
 
-  m_gasUsedTotal = 0;
-  m_txnFees = 0;
-
-  if (m_mediator.m_ds->m_mode != DirectoryService::Mode::IDLE) {
-    m_mediator.m_ds->m_toSendTxnToLookup = false;
-    m_mediator.m_ds->m_startedRunFinalblockConsensus = false;
-    m_mediator.m_ds->m_stateDeltaWhenRunDSMB =
-        m_mediator.m_ds->m_stateDeltaFromShards;
-
-    if (m_mediator.GetIsVacuousEpoch()) {
-      // Coinbase
-      LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-                "[CNBSE]");
-
-      m_mediator.m_ds->InitCoinbase();
-      m_mediator.m_ds->m_stateDeltaWhenRunDSMB.clear();
-      if (!AccountStore::GetInstance().SerializeDelta()) {
-        LOG_GENERAL(WARNING, "AccountStore::SerializeDelta failed.");
-        return false;
-      }
-      AccountStore::GetInstance().GetSerializedDelta(
-          m_mediator.m_ds->m_stateDeltaWhenRunDSMB);
-    }
+  if (m_mediator.GetIsVacuousEpoch()) {
+    LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
+              "Vacuous epoch: Skipping submit transactions");
+    CleanCreatedTransaction();
   }
 
   if (m_isPrimary) {
@@ -854,10 +920,6 @@ bool Node::CheckMicroBlockshardId() {
     return true;
   }
 
-  // Check version (must be most current version)
-  if (m_mediator.m_ds->m_mode != DirectoryService::Mode::IDLE) {
-    return true;
-  }
   if (m_microblock->GetHeader().GetShardId() != m_myshardId) {
     LOG_GENERAL(WARNING, "shardId check failed. Expected: "
                              << m_myshardId << " Actual: "
@@ -913,9 +975,8 @@ bool Node::CheckMicroBlockTimestamp() {
   // the Tx blockchain)
   if (m_mediator.m_txBlockChain.GetBlockCount() > 0) {
     const TxBlock& lastTxBlock = m_mediator.m_txBlockChain.GetLastBlock();
-    uint256_t thisMicroblockTimestamp =
-        m_microblock->GetHeader().GetTimestamp();
-    uint256_t lastTxBlockTimestamp = lastTxBlock.GetHeader().GetTimestamp();
+    uint64_t thisMicroblockTimestamp = m_microblock->GetTimestamp();
+    uint64_t lastTxBlockTimestamp = lastTxBlock.GetTimestamp();
     if (thisMicroblockTimestamp <= lastTxBlockTimestamp) {
       LOG_GENERAL(WARNING, "Timestamp check failed. Last Tx Block: "
                                << lastTxBlockTimestamp
@@ -982,9 +1043,11 @@ unsigned char Node::CheckLegitimacyOfTxnHashes(
       if (m_mediator.m_ds->m_mode != DirectoryService::Mode::IDLE) {
         LOG_GENERAL(WARNING, "Got missing txns, revert state delta");
         if (!AccountStore::GetInstance().DeserializeDeltaTemp(
-                m_mediator.m_ds->m_stateDeltaWhenRunDSMB, 0)) {
+                m_mediator.m_ds->m_stateDeltaFromShards, 0)) {
           LOG_GENERAL(WARNING, "AccountStore::DeserializeDeltaTemp failed.");
           return LEGITIMACYRESULT::DESERIALIZATIONERROR;
+        } else {
+          AccountStore::GetInstance().SerializeDelta();
         }
       }
 
@@ -1056,8 +1119,8 @@ bool Node::CheckMicroBlockHashes(vector<unsigned char>& errorMsg) {
   if (m_mediator.GetIsVacuousEpoch() &&
       m_mediator.m_ds->m_mode != DirectoryService::IDLE) {
     // Check COINBASE_REWARD + totalTxnFees
-    uint256_t rewards = 0;
-    if (!SafeMath<uint256_t>::add(m_mediator.m_ds->m_totalTxnFees,
+    uint128_t rewards = 0;
+    if (!SafeMath<uint128_t>::add(m_mediator.m_ds->m_totalTxnFees,
                                   COINBASE_REWARD, rewards)) {
       LOG_GENERAL(WARNING, "total_reward addition unsafe!");
     }
@@ -1146,11 +1209,9 @@ bool Node::CheckMicroBlockStateDeltaHash() {
 }
 
 bool Node::CheckMicroBlockTranReceiptHash() {
-  uint64_t blockNum = m_mediator.m_currentEpochNum;
-  auto& processedTransactions = m_processedTransactions[blockNum];
   TxnHash expectedTranHash;
   if (!TransactionWithReceipt::ComputeTransactionReceiptsHash(
-          m_microblock->GetTranHashes(), processedTransactions,
+          m_microblock->GetTranHashes(), t_processedTransactions,
           expectedTranHash)) {
     LOG_GENERAL(WARNING, "Cannot compute transaction receipts hash");
     return false;
@@ -1173,6 +1234,33 @@ bool Node::CheckMicroBlockTranReceiptHash() {
   LOG_GENERAL(INFO, "Transaction receipt hash check passed");
 
   return true;
+}
+
+bool Node::CheckMicroBlockValidity(vector<unsigned char>& errorMsg) {
+  if (LOOKUP_NODE_MODE) {
+    LOG_GENERAL(WARNING,
+                "Node::CheckMicroBlockValidity not expected to "
+                "be called from LookUp node.");
+    return true;
+  }
+
+  LOG_MARKER();
+
+  return CheckBlockTypeIsMicro() && CheckMicroBlockVersion() &&
+         CheckMicroBlockshardId() && CheckMicroBlockTimestamp() &&
+         CheckMicroBlockHashes(errorMsg) && CheckMicroBlockTxnRootHash() &&
+         CheckMicroBlockStateDeltaHash() && CheckMicroBlockTranReceiptHash();
+
+  // Check gas limit (must satisfy some equations)
+  // Check gas used (must be <= gas limit)
+  // Check state root (TBD)
+  // Check pubkey (must be valid and = shard leader)
+  // Check parent DS hash (must be = digest of last DS block header in the DS
+  // blockchain) Need some rework to be able to access DS blockchain (or we
+  // switch to using the persistent storage lib) Check parent DS block number
+  // (must be = block number of last DS block header in the DS blockchain) Need
+  // some rework to be able to access DS blockchain (or we switch to using the
+  // persistent storage lib)
 }
 
 bool Node::MicroBlockValidator(const vector<unsigned char>& message,
@@ -1220,29 +1308,14 @@ bool Node::MicroBlockValidator(const vector<unsigned char>& message,
     return false;
   }
 
-  if (!CheckBlockTypeIsMicro() || !CheckMicroBlockVersion() ||
-      !CheckMicroBlockshardId() || !CheckMicroBlockTimestamp() ||
-      !CheckMicroBlockHashes(errorMsg) || !CheckMicroBlockTxnRootHash() ||
-      !CheckMicroBlockStateDeltaHash() || !CheckMicroBlockTranReceiptHash()) {
+  if (!CheckMicroBlockValidity(errorMsg)) {
     m_microblock = nullptr;
     Serializable::SetNumber<uint32_t>(errorMsg, errorMsg.size(),
                                       m_mediator.m_selfPeer.m_listenPortHost,
                                       sizeof(uint32_t));
-    // LOG_GENERAL(INFO, "To-do: What to do if proposed microblock is not
-    // valid?");
+    LOG_GENERAL(WARNING, "CheckMicroBlockValidity Failed");
     return false;
   }
-
-  // Check gas limit (must satisfy some equations)
-  // Check gas used (must be <= gas limit)
-  // Check state root (TBD)
-  // Check pubkey (must be valid and = shard leader)
-  // Check parent DS hash (must be = digest of last DS block header in the DS
-  // blockchain) Need some rework to be able to access DS blockchain (or we
-  // switch to using the persistent storage lib) Check parent DS block number
-  // (must be = block number of last DS block header in the DS blockchain) Need
-  // some rework to be able to access DS blockchain (or we switch to using the
-  // persistent storage lib)
 
   return true;
 }

@@ -61,7 +61,7 @@ P2PComm::BroadcastListFunc P2PComm::m_broadcast_list_retriever;
 struct hash_compare {
   bool operator()(const vector<unsigned char>& l,
                   const vector<unsigned char>& r) {
-    return equal(l.begin(), l.end(), r.begin());
+    return equal(l.begin(), l.end(), r.begin(), r.end());
   }
 };
 
@@ -273,7 +273,7 @@ void SendJob::SendMessageCore(const Peer& peer,
       return;
     }
     this_thread::sleep_for(
-        chrono::milliseconds(rand() % PUMPMESSAGE_MILLISECONDS));
+        chrono::milliseconds(rand() % PUMPMESSAGE_MILLISECONDS + 1));
   }
 }
 
@@ -509,6 +509,7 @@ void P2PComm::EventCallback(struct bufferevent* bev, short events,
             vector<unsigned char>(message.begin() + HDR_LEN + HASH_LEN,
                                   message.end()),
             from);
+    LOG_GENERAL(INFO, "Size of Message: " << message.size());
 
     // Queue the message
     m_dispatcher(raw_message);
@@ -521,6 +522,7 @@ void P2PComm::EventCallback(struct bufferevent* bev, short events,
         new pair<vector<unsigned char>, Peer>(
             vector<unsigned char>(message.begin() + HDR_LEN, message.end()),
             from);
+    LOG_GENERAL(INFO, "Size of Message: " << message.size());
 
     // Queue the message
     m_dispatcher(raw_message);
@@ -563,6 +565,7 @@ void P2PComm::EventCallback(struct bufferevent* bev, short events,
       if (p2p.SpreadRumor(rumor_message)) {
         std::pair<vector<unsigned char>, Peer>* raw_message =
             new pair<vector<unsigned char>, Peer>(rumor_message, from);
+        LOG_GENERAL(INFO, "Size of Message: " << rumor_message.size());
 
         // Queue the message
         m_dispatcher(raw_message);
@@ -572,6 +575,7 @@ void P2PComm::EventCallback(struct bufferevent* bev, short events,
                                                 from)) {
       std::pair<vector<unsigned char>, Peer>* raw_message =
           new pair<vector<unsigned char>, Peer>(rumor_message, from);
+      LOG_GENERAL(INFO, "Size of Message: " << rumor_message.size());
 
       // Queue the message
       m_dispatcher(raw_message);
@@ -698,8 +702,8 @@ void P2PComm::SendMessage(const vector<Peer>& peers,
   job->m_hash.clear();
 
   // Queue job
-  while (!m_sendQueue.push(job)) {
-    // Keep attempting to push until success
+  if (!m_sendQueue.bounded_push(job)) {
+    LOG_GENERAL(WARNING, "SendQueue is full");
   }
 }
 
@@ -721,8 +725,8 @@ void P2PComm::SendMessage(const deque<Peer>& peers,
   job->m_hash.clear();
 
   // Queue job
-  while (!m_sendQueue.push(job)) {
-    // Keep attempting to push until success
+  if (!m_sendQueue.bounded_push(job)) {
+    LOG_GENERAL(WARNING, "SendQueue is full");
   }
 }
 
@@ -740,8 +744,8 @@ void P2PComm::SendMessage(const Peer& peer,
   job->m_hash.clear();
 
   // Queue job
-  while (!m_sendQueue.push(job)) {
-    // Keep attempting to push until success
+  if (!m_sendQueue.bounded_push(job)) {
+    LOG_GENERAL(WARNING, "SendQueue is full");
   }
 }
 
@@ -767,8 +771,8 @@ void P2PComm::SendBroadcastMessage(const vector<Peer>& peers,
   vector<unsigned char> hashCopy(job->m_hash);
 
   // Queue job
-  while (!m_sendQueue.push(job)) {
-    // Keep attempting to push until success
+  if (!m_sendQueue.bounded_push(job)) {
+    LOG_GENERAL(WARNING, "SendQueue is full");
   }
 
   lock_guard<mutex> guard(m_broadcastHashesMutex);
@@ -797,8 +801,8 @@ void P2PComm::SendBroadcastMessage(const deque<Peer>& peers,
   vector<unsigned char> hashCopy(job->m_hash);
 
   // Queue job
-  while (!m_sendQueue.push(job)) {
-    // Keep attempting to push until success
+  if (!m_sendQueue.bounded_push(job)) {
+    LOG_GENERAL(WARNING, "SendQueue is full");
   }
 
   lock_guard<mutex> guard(m_broadcastHashesMutex);
@@ -820,8 +824,8 @@ void P2PComm::RebroadcastMessage(const vector<Peer>& peers,
   job->m_hash = msg_hash;
 
   // Queue job
-  while (!m_sendQueue.push(job)) {
-    // Keep attempting to push until success
+  if (!m_sendQueue.bounded_push(job)) {
+    LOG_GENERAL(WARNING, "SendQueue is full");
   }
 }
 
@@ -875,5 +879,7 @@ void P2PComm::InitializeRumorManager(const std::vector<Peer>& peers) {
     if (peers.size() != 0) {
       m_rumorManager.StartRounds();
     }
+    // Spread the buffered rumors
+    m_rumorManager.SpreadBufferedRumors();
   }
 }

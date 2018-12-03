@@ -70,8 +70,9 @@ class ConsensusCommon {
     WRONG_REWARDS,
     FINALBLOCK_MISSING_MICROBLOCKS,
     FINALBLOCK_INVALID_MICROBLOCK_ROOT_HASH,
-    FINALBLOCK_MICROBLOCK_EMPTY_ERROR,
+    FINALBLOCK_MICROBLOCK_TXNROOT_ERROR,
     FINALBLOCK_MBS_LEGITIMACY_ERROR,
+    INVALID_DS_MICROBLOCK,
     INVALID_MICROBLOCK_STATE_DELTA_HASH,
     INVALID_MICROBLOCK_SHARD_ID,
     INVALID_MICROBLOCK_TRAN_RECEIPT_HASH,
@@ -102,9 +103,6 @@ class ConsensusCommon {
 
   /// State of the active consensus session.
   ConsensusErrorCode m_consensusErrorCode;
-
-  /// The minimum fraction of peers necessary to achieve consensus.
-  static constexpr double TOLERANCE_FRACTION = 0.667;
 
   /// The unique ID assigned to the active consensus session.
   uint32_t m_consensusID;
@@ -165,7 +163,7 @@ class ConsensusCommon {
                   unsigned char class_byte, unsigned char ins_byte);
 
   /// Destructor.
-  ~ConsensusCommon();
+  virtual ~ConsensusCommon();
 
   /// Generates the signature over a consensus message.
   Signature SignMessage(const std::vector<unsigned char>& msg,
@@ -204,6 +202,9 @@ class ConsensusCommon {
     return false;  // Should be implemented by ConsensusLeader and
                    // ConsensusBackup
   }
+
+  /// The minimum fraction of peers necessary to achieve consensus.
+  static constexpr double TOLERANCE_FRACTION = 0.667;
 
   /// Returns the state of the active consensus session
   State GetState() const;
@@ -245,6 +246,8 @@ class ConsensusCommon {
 
   /// Returns a string representation of the current state
   std::string GetStateString() const;
+
+  virtual unsigned int GetNumForConsensusFailure() = 0;
 
   /// Return a string respresentation of the given state
   std::string GetStateString(const State state) const;

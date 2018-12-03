@@ -16,6 +16,25 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 # check dependencies
 #
 find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBEVENT REQUIRED libevent)
+link_directories(${LIBEVENT_LIBRARY_DIRS})
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    pkg_check_modules(MINIUPNPC miniupnpc REQUIRED)
+    link_directories(${MINIUPNPC_LIBRARY_DIRS})
+
+    find_package(jsoncpp REQUIRED)
+    find_package(libjson-rpc-cpp REQUIRED COMPONENTS jsonrpccommon jsonrpcserver)
+    set(JSONCPP_LINK_TARGETS "jsoncpp_lib")
+    set(JSONRPCCPP_LINK_TARGETS "libjson-rpc-cpp::jsonrpccommon;libjson-rpc-cpp::jsonrpcserver")
+else()
+    pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+    include_directories(${JSONCPP_INCLUDE_DIRS})
+    link_directories(${JSONCPP_LIBRARY_DIRS})
+    set(JSONCPP_LINK_TARGETS "jsoncpp")
+    set(JSONRPCCPP_LINK_TARGETS "jsonrpccpp-common;jsonrpccpp-server")
+endif()
+
 
 include(InstallG3log)
 find_package(g3logger CONFIG REQUIRED)
@@ -28,9 +47,6 @@ endif()
 include_directories(${LIBMONGOCXX_INCLUDE_DIRS})
 
 find_package(Boost COMPONENTS filesystem system unit_test_framework)
-
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-include_directories(${JSONCPP_INCLUDE_DIRS})
 
 find_program(HOMEBREW NAMES brew PATH /usr/local/bin)
 
@@ -106,9 +122,52 @@ if(VC_TEST_VC_SUSPEND_3)
 	add_definitions(-DVC_TEST_VC_SUSPEND_3)
 endif()
 
+if(VC_TEST_VC_PRECHECK_1)
+    message(STATUS "VC 7 test enabled")
+    add_definitions(-DVC_TEST_VC_PRECHECK_1)
+endif()
+
+if(VC_TEST_VC_PRECHECK_2)
+    message(STATUS "VC 8 test enabled")
+    add_definitions(-DVC_TEST_VC_PRECHECK_2)
+endif()
+
+# For Merging DSMB into FINALBLOCK
+if(DM_TEST_DM_LESSTXN_ONE)
+    message(STATUS "DM 1 test enabled")
+    add_definitions(-DDM_TEST_DM_LESSTXN_ONE)
+endif()
+
+if(DM_TEST_DM_LESSTXN_ALL)
+    message(STATUS "DM 2 test enabled")
+    add_definitions(-DDM_TEST_DM_LESSTXN_ALL)
+endif()
+
+if(DM_TEST_DM_LESSMB_ONE)
+    message(STATUS "DM 3 test enabled")
+    add_definitions(-DDM_TEST_DM_LESSMB_ONE)
+endif()
+
+if(DM_TEST_DM_LESSMB_ALL)
+    message(STATUS "DM 4 test enabled")
+    add_definitions(-DDM_TEST_DM_LESSMB_ALL)
+endif()
+
+if(DM_TEST_DM_BAD_ANNOUNCE)
+    message(STATUS "DM 5 test enabled")
+    add_definitions(-DDM_TEST_DM_BAD_ANNOUNCE)
+endif()
+
+if(DM_TEST_DM_BAD_MB_ANNOUNCE)
+    message(STATUS "DM 6 test enabled")
+    add_definitions(-DDM_TEST_DM_BAD_MB_ANNOUNCE)
+endif()
+
 include(FindProtobuf)
 find_package(Protobuf REQUIRED)
 include_directories(${PROTOBUF_INCLUDE_DIR})
+
+include_directories(${CMAKE_SOURCE_DIR}/src/depends/libethash/include/)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -200,7 +259,7 @@ if(TESTS)
 endif()
 
 # installation
-set_target_properties(zilliqa sendcmd sendtxn genkeypair gentxn signmultisig ZilliqaDaemon_AWS gensigninitialds
+set_target_properties(zilliqa sendcmd genkeypair gentxn signmultisig ZilliqaDaemon_AWS gensigninitialds
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set_target_properties(Common Trie ethash NAT

@@ -36,14 +36,13 @@ namespace filesys = boost::filesystem;
 
 Retriever::Retriever(Mediator& mediator) : m_mediator(mediator) {}
 
-void Retriever::RetrieveDSBlocks(bool& result, const bool& wakeupForUpgrade) {
+bool Retriever::RetrieveDSBlocks(bool wakeupForUpgrade) {
   LOG_MARKER();
 
   std::list<DSBlockSharedPtr> blocks;
   if (!BlockStorage::GetBlockStorage().GetAllDSBlocks(blocks)) {
     LOG_GENERAL(WARNING, "RetrieveDSBlocks skipped or incompleted");
-    result = false;
-    return;
+    return false;
   }
 
   blocks.sort([](const DSBlockSharedPtr& a, const DSBlockSharedPtr& b) {
@@ -56,8 +55,7 @@ void Retriever::RetrieveDSBlocks(bool& result, const bool& wakeupForUpgrade) {
       if (!BlockStorage::GetBlockStorage().GetMetadata(
               MetaType::LATESTACTIVEDSBLOCKNUM, latestActiveDSBlockNumVec)) {
         LOG_GENERAL(WARNING, "Get LatestActiveDSBlockNum failed");
-        result = false;
-        return;
+        return false;
       }
       m_mediator.m_ds->m_latestActiveDSBlockNum = std::stoull(
           DataConversion::CharArrayToString(latestActiveDSBlockNumVec));
@@ -70,8 +68,7 @@ void Retriever::RetrieveDSBlocks(bool& result, const bool& wakeupForUpgrade) {
   if (!BlockStorage::GetBlockStorage().GetMetadata(MetaType::DSINCOMPLETED,
                                                    isDSIncompleted)) {
     LOG_GENERAL(WARNING, "No GetMetadata or failed");
-    result = false;
-    return;
+    return false;
   }
 
   if (isDSIncompleted[0] == '1') {
@@ -99,16 +96,15 @@ void Retriever::RetrieveDSBlocks(bool& result, const bool& wakeupForUpgrade) {
         block->GetBlockHash());
   }
 
-  result = true;
+  return true;
 }
 
-void Retriever::RetrieveTxBlocks(bool& result, const bool& wakeupForUpgrade) {
+bool Retriever::RetrieveTxBlocks(bool wakeupForUpgrade) {
   LOG_MARKER();
   std::list<TxBlockSharedPtr> blocks;
   if (!BlockStorage::GetBlockStorage().GetAllTxBlocks(blocks)) {
     LOG_GENERAL(WARNING, "RetrieveTxBlocks skipped or incompleted");
-    result = false;
-    return;
+    return false;
   }
 
   blocks.sort([](const TxBlockSharedPtr& a, const TxBlockSharedPtr& b) {
@@ -118,10 +114,8 @@ void Retriever::RetrieveTxBlocks(bool& result, const bool& wakeupForUpgrade) {
   unsigned int totalSize = blocks.size();
   unsigned int extra_txblocks = totalSize % NUM_FINAL_BLOCK_PER_POW;
 
-  if (wakeupForUpgrade ||
-      (blocks.back()->GetHeader().GetBlockNum() + NUM_VACUOUS_EPOCHS) %
-              NUM_FINAL_BLOCK_PER_POW ==
-          0) {
+  if (wakeupForUpgrade || m_mediator.GetIsVacuousEpoch(
+                              (blocks.back()->GetHeader().GetBlockNum()))) {
     // truncate the extra final blocks at last
     for (unsigned int i = 0; i < extra_txblocks; ++i) {
       BlockStorage::GetBlockStorage().DeleteTxBlock(totalSize - 1 - i);
@@ -131,22 +125,6 @@ void Retriever::RetrieveTxBlocks(bool& result, const bool& wakeupForUpgrade) {
 
   for (const auto& block : blocks) {
     m_mediator.m_node->AddBlock(*block);
-  }
-
-  result = true;
-
-  /// If recovery mode with vacuous epoch or less than 1 DS epoch, apply re-join
-  /// process instead of node recovery
-  if (!wakeupForUpgrade &&
-      (blocks.back()->GetHeader().GetBlockNum() < NUM_FINAL_BLOCK_PER_POW ||
-       (blocks.back()->GetHeader().GetBlockNum() + NUM_VACUOUS_EPOCHS) %
-               NUM_FINAL_BLOCK_PER_POW ==
-           0)) {
-    result = false;
-    LOG_GENERAL(INFO,
-                "Node recovery with vacuous epoch or too early, apply "
-                "re-join process instead");
-    return;
   }
 
   /// Retrieve final block state delta from last DS epoch to
@@ -160,11 +138,174 @@ void Retriever::RetrieveTxBlocks(bool& result, const bool& wakeupForUpgrade) {
       if (!AccountStore::GetInstance().DeserializeDelta(stateDelta, 0)) {
         LOG_GENERAL(WARNING,
                     "AccountStore::GetInstance().DeserializeDelta failed");
-        result = false;
-        return;
+        return false;
       }
     }
   }
+
+  return true;
+}
+
+bool Retriever::RetrieveBlockLink(bool wakeupForUpgrade) {
+  std::list<BlockLink> blocklinks;
+
+  auto dsComm = m_mediator.m_blocklinkchain.GetBuiltDSComm();
+
+  if (!BlockStorage::GetBlockStorage().GetAllBlockLink(blocklinks)) {
+    LOG_GENERAL(WARNING, "RetrieveTxBlocks skipped or incompleted");
+    return false;
+  }
+  blocklinks.sort([](const BlockLink& a, const BlockLink& b) {
+    return std::get<BlockLinkIndex::INDEX>(a) <
+           std::get<BlockLinkIndex::INDEX>(b);
+  });
+
+  if (!blocklinks.empty()) {
+    if (m_mediator.m_ds->m_latestActiveDSBlockNum == 0) {
+      std::vector<unsigned char> latestActiveDSBlockNumVec;
+      if (!BlockStorage::GetBlockStorage().GetMetadata(
+              MetaType::LATESTACTIVEDSBLOCKNUM, latestActiveDSBlockNumVec)) {
+        LOG_GENERAL(WARNING, "Get LatestActiveDSBlockNum failed");
+        return false;
+      }
+      m_mediator.m_ds->m_latestActiveDSBlockNum = std::stoull(
+          DataConversion::CharArrayToString(latestActiveDSBlockNumVec));
+    }
+  } else {
+    return false;
+  }
+
+  /// Check whether the termination of last running happens before the last
+  /// DSEpoch properly ended.
+  std::vector<unsigned char> isDSIncompleted;
+  if (!BlockStorage::GetBlockStorage().GetMetadata(MetaType::DSINCOMPLETED,
+                                                   isDSIncompleted)) {
+    LOG_GENERAL(WARNING, "No GetMetadata or failed");
+    return false;
+  }
+
+  BlockStorage::GetBlockStorage().ResetDB(BlockStorage::DBTYPE::BLOCKLINK);
+
+  bool toDelete = false;
+
+  if (isDSIncompleted[0] == '1') {
+    /// Removing incompleted DS for upgrading protocol
+    /// Keeping incompleted DS for node recovery
+    if (wakeupForUpgrade) {
+      LOG_GENERAL(INFO, "Has incompleted DS Block, remove it");
+      toDelete = true;
+    }
+  }
+
+  uint64_t lastDsIndex = std::get<BlockLinkIndex::DSINDEX>(blocklinks.back());
+  const BlockType lastType =
+      std::get<BlockLinkIndex::BLOCKTYPE>(blocklinks.back());
+  if (lastType != BlockType::DS) {
+    if (lastDsIndex == 0) {
+      LOG_GENERAL(FATAL, "last ds index is 0 and blockType not DS");
+    }
+    lastDsIndex--;
+  }
+
+  std::list<BlockLink>::iterator blocklinkItr;
+  for (blocklinkItr = blocklinks.begin(); blocklinkItr != blocklinks.end();
+       blocklinkItr++) {
+    const auto& blocklink = *blocklinkItr;
+
+    if (toDelete) {
+      if ((std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) == BlockType::DS) &&
+          (std::get<BlockLinkIndex::DSINDEX>(blocklink) == lastDsIndex)) {
+        LOG_GENERAL(INFO, "Broke at DS Index " << lastDsIndex);
+        break;
+      }
+    }
+
+    if (std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) == BlockType::DS) {
+      DSBlockSharedPtr dsblock;
+      if (!BlockStorage::GetBlockStorage().GetDSBlock(
+              std::get<BlockLinkIndex::DSINDEX>(blocklink), dsblock)) {
+        LOG_GENERAL(WARNING,
+                    "Could not find ds block num "
+                        << std::get<BlockLinkIndex::DSINDEX>(blocklink));
+        return false;
+      }
+      m_mediator.m_node->UpdateDSCommiteeComposition(dsComm, *dsblock);
+      m_mediator.m_blocklinkchain.SetBuiltDSComm(dsComm);
+      m_mediator.m_dsBlockChain.AddBlock(*dsblock);
+
+    } else if (std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) ==
+               BlockType::VC) {
+      VCBlockSharedPtr vcblock;
+
+      if (!BlockStorage::GetBlockStorage().GetVCBlock(
+              std::get<BlockLinkIndex::BLOCKHASH>(blocklink), vcblock)) {
+        LOG_GENERAL(WARNING,
+                    "Could not find vc with blockHash "
+                        << std::get<BlockLinkIndex::BLOCKHASH>(blocklink));
+        return false;
+      }
+      m_mediator.m_node->UpdateRetrieveDSCommiteeCompositionAfterVC(*vcblock,
+                                                                    dsComm);
+
+    } else if (std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) ==
+               BlockType::FB) {
+      FallbackBlockSharedPtr fallbackwshardingstruct;
+      if (!BlockStorage::GetBlockStorage().GetFallbackBlock(
+              std::get<BlockLinkIndex::BLOCKHASH>(blocklink),
+              fallbackwshardingstruct)) {
+        LOG_GENERAL(WARNING,
+                    "Could not find vc with blockHash "
+                        << std::get<BlockLinkIndex::BLOCKHASH>(blocklink));
+        return false;
+      }
+      uint32_t shard_id =
+          fallbackwshardingstruct->m_fallbackblock.GetHeader().GetShardId();
+      const PubKey& leaderPubKey =
+          fallbackwshardingstruct->m_fallbackblock.GetHeader()
+              .GetLeaderPubKey();
+      const Peer& leaderNetworkInfo =
+          fallbackwshardingstruct->m_fallbackblock.GetHeader()
+              .GetLeaderNetworkInfo();
+      const DequeOfShard& shards = fallbackwshardingstruct->m_shards;
+      m_mediator.m_node->UpdateDSCommitteeAfterFallback(
+          shard_id, leaderPubKey, leaderNetworkInfo, dsComm, shards);
+    }
+
+    m_mediator.m_blocklinkchain.AddBlockLink(
+        std::get<BlockLinkIndex::INDEX>(blocklink),
+        std::get<BlockLinkIndex::DSINDEX>(blocklink),
+        std::get<BlockLinkIndex::BLOCKTYPE>(blocklink),
+        std::get<BlockLinkIndex::BLOCKHASH>(blocklink));
+  }
+
+  if (!toDelete) {
+    return true;
+  }
+
+  for (; blocklinkItr != blocklinks.end(); blocklinkItr++) {
+    const auto& blocklink = *blocklinkItr;
+    if (std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) == BlockType::DS) {
+      if (BlockStorage::GetBlockStorage().DeleteDSBlock(
+              std::get<BlockLinkIndex::DSINDEX>(blocklink))) {
+        BlockStorage::GetBlockStorage().PutMetadata(MetaType::DSINCOMPLETED,
+                                                    {'0'});
+      }
+    } else if (std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) ==
+               BlockType::VC) {
+      if (!BlockStorage::GetBlockStorage().DeleteVCBlock(
+              std::get<BlockLinkIndex::BLOCKHASH>(blocklink))) {
+        LOG_GENERAL(WARNING, "Could not delete VC block");
+      }
+    } else if (std::get<BlockLinkIndex::BLOCKTYPE>(blocklink) ==
+               BlockType::FB) {
+      if (!BlockStorage::GetBlockStorage().DeleteFallbackBlock(
+              std::get<BlockLinkIndex::BLOCKHASH>(blocklink))) {
+        LOG_GENERAL(WARNING, "Could not deleteLoop  FB block");
+      }
+    }
+  }
+
+  return true;
 }
 
 bool Retriever::CleanExtraTxBodies() {

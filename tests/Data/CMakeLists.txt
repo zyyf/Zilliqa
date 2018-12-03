@@ -3,8 +3,8 @@ configure_file(${CMAKE_SOURCE_DIR}/constants.xml constants.xml COPYONLY)
 link_directories(${CMAKE_BINARY_DIR}/lib)
 
 add_executable(Test_Account Test_Account.cpp)
-target_include_directories(Test_Account PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(Test_Account PUBLIC AccountData Crypto Trie Utils Persistence)
+target_include_directories(Test_Account PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests)
+target_link_libraries(Test_Account PUBLIC AccountData Crypto Trie Utils Persistence TestUtils)
 add_test(NAME Test_Account COMMAND Test_Account Message)
 
 add_executable(Test_AccountStore Test_AccountStore.cpp)

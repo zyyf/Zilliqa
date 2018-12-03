@@ -95,10 +95,10 @@ bool Validator::CheckCreatedTransactionFromLookup(const Transaction& tx) {
   Address fromAddr = Account::GetAddressFromPublicKey(senderPubKey);
   unsigned int shardId = m_mediator.m_node->GetShardId();
   unsigned int numShards = m_mediator.m_node->getNumShards();
-  unsigned int correct_shard_from =
-      Transaction::GetShardIndex(fromAddr, numShards);
 
   if (m_mediator.m_ds->m_mode == DirectoryService::Mode::IDLE) {
+    unsigned int correct_shard_from =
+        Transaction::GetShardIndex(fromAddr, numShards);
     if (correct_shard_from != shardId) {
       LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
                 "This tx is not sharded to me!"
@@ -122,6 +122,17 @@ bool Validator::CheckCreatedTransactionFromLookup(const Transaction& tx) {
         return false;
       }
     }
+  }
+
+  if (tx.GetGasPrice() <
+      m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetGasPrice()) {
+    LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+              "GasPrice " << tx.GetGasPrice()
+                          << " lower than minimum allowable "
+                          << m_mediator.m_dsBlockChain.GetLastBlock()
+                                 .GetHeader()
+                                 .GetGasPrice());
+    return false;
   }
 
   if (!VerifyTransaction(tx)) {
@@ -254,7 +265,7 @@ bool Validator::CheckDirBlocks(
       } else {
         m_mediator.m_archDB->InsertDSBlock(dsblock);
       }
-      m_mediator.m_node->UpdateDSCommiteeComposition(mutable_ds_comm);
+      m_mediator.m_node->UpdateDSCommiteeComposition(mutable_ds_comm, dsblock);
       totalIndex++;
 
     } else if (typeid(VCBlock) == dirBlock.type()) {
@@ -277,8 +288,8 @@ bool Validator::CheckDirBlocks(
         break;
       }
 
-      m_mediator.m_node->UpdateDSCommiteeCompositionAfterVC(vcblock,
-                                                            mutable_ds_comm);
+      m_mediator.m_node->UpdateRetrieveDSCommiteeCompositionAfterVC(
+          vcblock, mutable_ds_comm);
       m_mediator.m_blocklinkchain.AddBlockLink(totalIndex, prevdsblocknum + 1,
                                                BlockType::VC,
                                                vcblock.GetBlockHash());

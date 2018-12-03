@@ -23,7 +23,10 @@
 
 #define BOOST_TEST_MODULE ipconverter
 #define BOOST_TEST_DYN_LINK
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 #include <boost/test/unit_test.hpp>
 
 using namespace std;
@@ -44,8 +47,8 @@ BOOST_AUTO_TEST_CASE(test_IPStringToNumerical) {
 
   boost::multiprecision::uint128_t result =
       IPConverter::ToNumericalIPFromStr("127.0.0.1");
-  BOOST_CHECK_MESSAGE(result == 16777343,
-                      "Expected: 16777343. Result: " + string(result));
+  BOOST_CHECK_MESSAGE(result == 16777343, "Expected: 16777343. Result: " +
+                                              result.convert_to<std::string>());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -23,7 +23,10 @@
 #include <json/json.h>
 #include <leveldb/db.h>
 #include <array>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 #include <vector>
 
 #include "Address.h"
@@ -45,8 +48,8 @@ template <class KeyType, class DB>
 using AccountTrieDB = dev::SpecificTrieDB<dev::GenericTrieDB<DB>, KeyType>;
 
 class Account : public SerializableDataBlock {
-  boost::multiprecision::uint256_t m_balance;
-  boost::multiprecision::uint256_t m_nonce;
+  boost::multiprecision::uint128_t m_balance;
+  uint64_t m_nonce;
   dev::h256 m_storageRoot, m_prevRoot;
   dev::h256 m_codeHash;
   // The associated code for this account.
@@ -66,11 +69,11 @@ class Account : public SerializableDataBlock {
   Account(const std::vector<unsigned char>& src, unsigned int offset);
 
   /// Constructor for a account.
-  Account(const boost::multiprecision::uint256_t& balance,
-          const boost::multiprecision::uint256_t& nonce);
+  Account(const boost::multiprecision::uint128_t& balance,
+          const uint64_t& nonce);
 
   /// Returns true if account is a contract account
-  bool isContract() const { return m_codeHash != dev::h256(); }
+  bool isContract() const;
 
   /// Utilization function for trieDB
   void InitStorage();
@@ -79,12 +82,10 @@ class Account : public SerializableDataBlock {
   void InitContract(const std::vector<unsigned char>& data);
 
   /// Set the block number when this account was created.
-  void SetCreateBlockNum(const uint64_t& blockNum) {
-    m_createBlockNum = blockNum;
-  }
+  void SetCreateBlockNum(const uint64_t& blockNum);
 
   /// Get the block number when this account was created.
-  const uint64_t& GetCreateBlockNum() const { return m_createBlockNum; }
+  const uint64_t& GetCreateBlockNum() const;
 
   /// Implements the Serialize function inherited from Serializable.
   bool Serialize(std::vector<unsigned char>& dst, unsigned int offset) const;
@@ -93,46 +94,40 @@ class Account : public SerializableDataBlock {
   bool Deserialize(const std::vector<unsigned char>& src, unsigned int offset);
 
   /// Increases account balance by the specified delta amount.
-  bool IncreaseBalance(const boost::multiprecision::uint256_t& delta);
+  bool IncreaseBalance(const boost::multiprecision::uint128_t& delta);
 
   /// Decreases account balance by the specified delta amount.
-  bool DecreaseBalance(const boost::multiprecision::uint256_t& delta);
+  bool DecreaseBalance(const boost::multiprecision::uint128_t& delta);
 
   bool ChangeBalance(const boost::multiprecision::int256_t& delta);
 
-  void SetBalance(const boost::multiprecision::uint256_t& balance) {
-    m_balance = balance;
-  }
+  void SetBalance(const boost::multiprecision::uint128_t& balance);
 
   /// Returns the account balance.
-  const boost::multiprecision::uint256_t& GetBalance() const {
-    return m_balance;
-  }
+  const boost::multiprecision::uint128_t& GetBalance() const;
 
   /// Increases account nonce by 1.
   bool IncreaseNonce();
 
-  bool IncreaseNonceBy(const boost::multiprecision::uint256_t& nonceDelta);
+  bool IncreaseNonceBy(const uint64_t& nonceDelta);
 
-  void SetNonce(const boost::multiprecision::uint256_t& nonce) {
-    m_nonce = nonce;
-  }
+  void SetNonce(const uint64_t& nonce);
 
   /// Returns the account nonce.
-  const boost::multiprecision::uint256_t& GetNonce() const { return m_nonce; }
+  const uint64_t& GetNonce() const;
 
   void SetStorageRoot(const dev::h256& root);
 
   /// Returns the storage root.
-  const dev::h256& GetStorageRoot() const { return m_storageRoot; }
+  const dev::h256& GetStorageRoot() const;
 
   /// Set the code
   void SetCode(const std::vector<unsigned char>& code);
 
-  const std::vector<unsigned char>& GetCode() const { return m_codeCache; }
+  const std::vector<unsigned char>& GetCode() const;
 
   /// Returns the code hash.
-  const dev::h256& GetCodeHash() const { return m_codeHash; }
+  const dev::h256& GetCodeHash() const;
 
   void SetStorage(const dev::h256& k_hash, const std::string& rlpStr);
 
@@ -144,13 +139,11 @@ class Account : public SerializableDataBlock {
 
   std::string GetRawStorage(const dev::h256& k_hash) const;
 
-  Json::Value GetInitJson() const { return m_initValJson; }
+  Json::Value GetInitJson() const;
 
-  const std::vector<unsigned char>& GetInitData() const { return m_initData; }
+  const std::vector<unsigned char>& GetInitData() const;
 
-  void SetInitData(const std::vector<unsigned char>& initData) {
-    m_initData = initData;
-  }
+  void SetInitData(const std::vector<unsigned char>& initData);
 
   void InitContract();
 
@@ -158,7 +151,7 @@ class Account : public SerializableDataBlock {
 
   Json::Value GetStorageJson() const;
 
-  void Commit() { m_prevRoot = m_storageRoot; }
+  void Commit();
 
   void RollBack();
 
@@ -166,8 +159,8 @@ class Account : public SerializableDataBlock {
   static Address GetAddressFromPublicKey(const PubKey& pubKey);
 
   /// Computes an account address from a sender and its nonce
-  static Address GetAddressForContract(
-      const Address& sender, const boost::multiprecision::uint256_t& nonce);
+  static Address GetAddressForContract(const Address& sender,
+                                       const uint64_t& nonce);
 
   friend inline std::ostream& operator<<(std::ostream& out,
                                          Account const& account);

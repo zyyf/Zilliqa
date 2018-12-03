@@ -43,6 +43,18 @@ uint64_t DistUint64() {
                                   std::numeric_limits<uint64_t>::max());
 }
 
+uint128_t DistUint128() {
+  uint128_t left64Rnd = DistUint64();
+  uint128_t righ64tRnd = DistUint64();
+  return left64Rnd << 64 | righ64tRnd;
+}
+
+uint256_t DistUint256() {
+  uint256_t left128Rnd = DistUint128();
+  uint256_t righ128tRnd = DistUint128();
+  return left128Rnd << 128 | righ128tRnd;
+}
+
 uint8_t Dist1to99() { return RandomIntInRng<uint8_t>((uint8_t)1, (uint8_t)99); }
 
 PubKey GenerateRandomPubKey() { return PubKey(PrivKey()); }
@@ -78,7 +90,7 @@ DSBlockHeader GenerateRandomDSBlockHeader() {
   PubKey leaderPubKey = GenerateRandomPubKey();
   uint64_t blockNum = DistUint32();
   uint64_t epochNum = DistUint32();
-  uint256_t timestamp = DistUint32();
+  uint128_t gasPrice = PRECISION_MIN_VALUE;
   SWInfo swInfo;
   map<PubKey, Peer> powDSWinners;
   DSBlockHashSet hash;
@@ -89,20 +101,19 @@ DSBlockHeader GenerateRandomDSBlockHeader() {
   }
 
   return DSBlockHeader(dsDifficulty, difficulty, prevHash, leaderPubKey,
-                       blockNum, epochNum, timestamp, swInfo, powDSWinners,
-                       hash, committeeHash);
+                       blockNum, epochNum, gasPrice, swInfo, powDSWinners, hash,
+                       committeeHash);
 }
 
 MicroBlockHeader GenerateRandomMicroBlockHeader() {
   uint8_t type = DistUint8();
   uint32_t version = DistUint32();
   uint32_t shardId = DistUint32();
-  uint256_t gasLimit = DistUint32();
-  uint256_t gasUsed = DistUint32();
-  uint256_t rewards = DistUint32();
+  uint64_t gasLimit = DistUint32();
+  uint64_t gasUsed = DistUint32();
+  uint128_t rewards = DistUint32();
   BlockHash prevHash;
   uint64_t epochNum = DistUint32();
-  uint256_t timestamp = DistUint32();
   MicroBlockHashSet hashset;
   uint32_t numTxs = Dist1to99();
   PubKey minerPubKey = GenerateRandomPubKey();
@@ -110,30 +121,27 @@ MicroBlockHeader GenerateRandomMicroBlockHeader() {
   CommitteeHash committeeHash;
 
   return MicroBlockHeader(type, version, shardId, gasLimit, gasUsed, rewards,
-                          prevHash, epochNum, timestamp, hashset, numTxs,
-                          minerPubKey, dsBlockNum, committeeHash);
+                          prevHash, epochNum, hashset, numTxs, minerPubKey,
+                          dsBlockNum, committeeHash);
 }
 
 TxBlockHeader GenerateRandomTxBlockHeader() {
   uint8_t type = DistUint8();
   uint32_t version = DistUint32();
-  uint256_t gasLimit = DistUint32();
-  uint256_t gasUsed = DistUint32();
-  uint256_t rewards = DistUint32();
+  uint64_t gasLimit = DistUint32();
+  uint64_t gasUsed = DistUint32();
+  uint128_t rewards = DistUint32();
   BlockHash prevHash;
   uint64_t blockNum = DistUint32();
-  uint256_t timestamp = DistUint32();
   TxBlockHashSet blockHashSet;
   uint32_t numTxs = Dist1to99();
-  uint32_t numMicroBlockHashes = Dist1to99();
   PubKey minerPubKey = GenerateRandomPubKey();
   uint64_t dsBlockNum = DistUint32();
   BlockHash dsBlockHeader;
   CommitteeHash committeeHash;
 
   return TxBlockHeader(type, version, gasLimit, gasUsed, rewards, prevHash,
-                       blockNum, timestamp, blockHashSet, numTxs,
-                       numMicroBlockHashes, minerPubKey, dsBlockNum,
+                       blockNum, blockHashSet, numTxs, minerPubKey, dsBlockNum,
                        committeeHash);
 }
 
@@ -144,9 +152,9 @@ VCBlockHeader GenerateRandomVCBlockHeader() {
   Peer candidateLeaderNetworkInfo = GenerateRandomPeer();
   PubKey candidateLeaderPubKey = GenerateRandomPubKey();
   uint32_t vcCounter = DistUint32();
-  uint256_t timestamp = DistUint32();
   vector<pair<PubKey, Peer>> faultyLeaders;
   CommitteeHash committeeHash;
+  BlockHash prevHash;
 
   for (unsigned int i = 0, count = Dist1to99(); i < count; i++) {
     faultyLeaders.emplace_back(GenerateRandomPubKey(), GenerateRandomPeer());
@@ -154,7 +162,7 @@ VCBlockHeader GenerateRandomVCBlockHeader() {
 
   return VCBlockHeader(vieWChangeDSEpochNo, viewChangeEpochNo, viewChangeState,
                        candidateLeaderNetworkInfo, candidateLeaderPubKey,
-                       vcCounter, faultyLeaders, timestamp, committeeHash);
+                       vcCounter, faultyLeaders, committeeHash, prevHash);
 }
 
 FallbackBlockHeader GenerateRandomFallbackBlockHeader() {
@@ -166,12 +174,12 @@ FallbackBlockHeader GenerateRandomFallbackBlockHeader() {
   Peer leaderNetworkInfo = GenerateRandomPeer();
   PubKey leaderPubKey = GenerateRandomPubKey();
   uint32_t shardId = DistUint32();
-  uint256_t timestamp = DistUint32();
   CommitteeHash committeeHash;
+  BlockHash prevHash;
 
   return FallbackBlockHeader(fallbackDSEpochNo, fallbackEpochNo, fallbackState,
                              hashset, leaderConsensusId, leaderNetworkInfo,
-                             leaderPubKey, shardId, timestamp, committeeHash);
+                             leaderPubKey, shardId, committeeHash, prevHash);
 }
 
 DS_Comitte_t GenerateRandomDSCommittee(uint32_t size) {
@@ -200,4 +208,19 @@ DequeOfShard GenerateDequeueOfShard(size_t size) {
 }
 
 CoSignatures GenerateRandomCoSignatures() { return CoSignatures(Dist1to99()); }
+
+std::string GenerateRandomString(size_t length) {
+  auto randchar = []() -> char {
+    const char charset[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+    const size_t max_index = (sizeof(charset) - 2);
+    return charset[RandomIntInRng<uint8_t>((uint8_t)0, (uint8_t)max_index)];
+  };
+  std::string str(length, 0);
+  std::generate_n(str.begin(), length, randchar);
+  return str;
+}
+
 }  // namespace TestUtils

@@ -21,7 +21,10 @@
 #define __BLOCKBASE_H__
 
 #include <array>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 
 #include "common/Constants.h"
 #include "common/Serializable.h"
@@ -49,6 +52,7 @@ class BlockBase : public SerializableDataBlock {
  protected:
   BlockHash m_blockHash;
   CoSignatures m_cosigs;
+  uint64_t m_timestamp;
 
  public:
   /// Default constructor.
@@ -56,6 +60,12 @@ class BlockBase : public SerializableDataBlock {
 
   /// Returns the block hash
   const BlockHash& GetBlockHash() const;
+
+  /// Returns the timestamp
+  const uint64_t& GetTimestamp() const;
+
+  /// Set the timestamp
+  void SetTimestamp(const uint64_t& timestamp);
 
   /// Set the block hash
   void SetBlockHash(const BlockHash& blockHash);

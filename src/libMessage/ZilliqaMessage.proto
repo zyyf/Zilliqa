@@ -20,7 +20,7 @@ message ProtoAccount
     }
     optional bool numbersign       = 1; // For account delta (false=neg, true=pos)
     required ByteArray balance     = 2;
-    required ByteArray nonce       = 3;
+    required uint64 nonce          = 3;
     optional bytes storageroot     = 4;
     optional bytes codehash        = 5;
     optional uint64 createblocknum = 6;
@@ -39,6 +39,12 @@ message ProtoAccountStore
     repeated AddressAccount entries   = 3;
 }
 
+message ProtoPeer
+{
+    required ByteArray ipaddress    = 1;
+    required uint32 listenporthost  = 2;
+}
+
 message ProtoDSNode
 {
     required ByteArray pubkey = 1;
@@ -47,9 +53,11 @@ message ProtoDSNode
 
 message ProtoPoWSolution
 {
-    required uint64 nonce  = 1;
-    required bytes result  = 2;
-    required bytes mixhash = 3;
+    required uint64 nonce        = 1;
+    required bytes result        = 2;
+    required bytes mixhash       = 3;
+    required uint32 lookupid     = 4;
+    required ByteArray gasprice  = 5;
 }
 
 message ProtoDSCommittee
@@ -73,6 +81,7 @@ message ProtoBlockBase
     }
     required bytes blockhash            = 1;
     required CoSignatures cosigs        = 2;
+    required uint64 timestamp           = 3;
 }
 
 message ProtoShardingStructureWithPoWSolns
@@ -125,13 +134,13 @@ message ProtoDSWinnerPoW
 
 message ProtoTransactionCoreInfo
 {
-    required ByteArray version      = 1;
-    required ByteArray nonce        = 2;
+    required uint32 version         = 1;
+    required uint64 nonce           = 2;
     required bytes toaddr           = 3;
     required ByteArray senderpubkey = 4;
     required ByteArray amount       = 5;
     required ByteArray gasprice     = 6;
-    required ByteArray gaslimit     = 7;
+    required uint64 gaslimit        = 7;
     required bytes code             = 8;
     required bytes data             = 9;
 }
@@ -156,13 +165,22 @@ message ProtoTransactionArray
 message ProtoTransactionReceipt
 {
     required bytes receipt    = 1;
-    required ByteArray cumgas = 2;
+    required uint64 cumgas = 2;
 }
 
 message ProtoTransactionWithReceipt
 {
     required ProtoTransaction transaction    = 1;
     required ProtoTransactionReceipt receipt = 2;
+}
+
+message ProtoSWInfo
+{
+    required uint32 majorversion        = 1;
+    required uint32 minorversion        = 2;
+    required uint32 fixversion          = 3;
+    required uint64 upgradeds           = 4;
+    required uint32 commit              = 5;
 }
 
 message ProtoDSBlock
@@ -175,13 +193,13 @@ message ProtoDSBlock
     }
     message DSBlockHeader
     {
-        required uint32 dsdifficulty    = 1; // only LSB used
-        required uint32 difficulty      = 2; // only LSB used
+        optional uint32 dsdifficulty    = 1; // only LSB used
+        optional uint32 difficulty      = 2; // only LSB used
         required bytes prevhash         = 3; // 32 bytes
         required ByteArray leaderpubkey = 4;
         required uint64 blocknum        = 5;
         required uint64 epochnum        = 6;
-        required ByteArray timestamp    = 7;
+        optional ByteArray gasprice     = 7;
         required ByteArray swinfo       = 8;
         message PowDSWinners
         {
@@ -203,61 +221,57 @@ message ProtoMicroBlock
         required uint32 type           = 1; // only LSB used
         required uint32 version        = 2;
         required uint32 shardid        = 3;
-        required ByteArray gaslimit    = 4;
-        required ByteArray gasused     = 5;
+        required uint64 gaslimit       = 4;
+        required uint64 gasused        = 5;
         required ByteArray rewards     = 6;
         required bytes prevhash        = 7;
         required uint64 epochnum       = 8;
-        required ByteArray timestamp   = 9;
-        required bytes txroothash      = 10;
-        required uint32 numtxs         = 11;
-        required ByteArray minerpubkey = 12;
-        required uint64 dsblocknum     = 13;
-        required bytes statedeltahash  = 14;
-        required bytes tranreceipthash = 15;
-        required bytes committeehash   = 16;
+        required bytes txroothash      = 9;
+        required uint32 numtxs         = 10;
+        required ByteArray minerpubkey = 11;
+        required uint64 dsblocknum     = 12;
+        required bytes statedeltahash  = 13;
+        required bytes tranreceipthash = 14;
+        required bytes committeehash   = 15;
     }
     required MicroBlockHeader header   = 1;
     repeated bytes tranhashes          = 2;
     required ProtoBlockBase blockbase  = 3;
 }
 
-message ProtoExtraMbInfo
+message ProtoMbInfo
 {
-    repeated bool ismicroblockempty = 1 [packed=true];
-    repeated uint32 shardids        = 2;
+    required bytes mbhash   = 1;
+    required bytes txroot   = 2;
+    required uint32 shardid = 3;
 }
 
 message ProtoTxBlock
 {
     message TxBlockHashSet
     {
-        required bytes mbroothash               = 1;
-        required bytes stateroothash            = 2;
-        required bytes statedeltahash           = 3;
-        required bytes mbinfohash               = 4;
+        required bytes stateroothash            = 1;
+        required bytes statedeltahash           = 2;
+        required bytes mbinfohash               = 3;
     }
     message TxBlockHeader
     {
         required uint32 type                    = 1; // only LSB used
         required uint32 version                 = 2;
-        required ByteArray gaslimit             = 3;
-        required ByteArray gasused              = 4;
+        required uint64 gaslimit                = 3;
+        required uint64 gasused                 = 4;
         required ByteArray rewards              = 5;
         required bytes prevhash                 = 6;
         required uint64 blocknum                = 7;
-        required ByteArray timestamp            = 8;
-        required TxBlockHashSet hash            = 9;
-        required uint32 numtxs                  = 10;
-        required uint32 nummicroblockhashes     = 11;
-        required ByteArray minerpubkey          = 12;
-        required uint64 dsblocknum              = 13;
-        required bytes committeehash            = 14;
+        required TxBlockHashSet hash            = 8;
+        required uint32 numtxs                  = 9;
+        required ByteArray minerpubkey          = 10;
+        required uint64 dsblocknum              = 11;
+        required bytes committeehash            = 12;
     }
     required TxBlockHeader header               = 1;
-    repeated bytes mbhashes                     = 2;
-    required ProtoExtraMbInfo extrambinfo       = 3;
-    required ProtoBlockBase blockbase           = 4;
+    repeated ProtoMbInfo mbinfos                = 2;
+    required ProtoBlockBase blockbase           = 3;
 }
 
 message ProtoVCBlock
@@ -271,8 +285,8 @@ message ProtoVCBlock
         required ByteArray candidateleaderpubkey      = 5;
         required uint32 vccounter                     = 6;
         repeated ProtoDSNode faultyleaders            = 7;
-        required ByteArray timestamp                  = 8;
-        required bytes committeehash                  = 9;
+        required bytes committeehash                  = 8;
+        required bytes prevhash                       = 9;
     }
     required VCBlockHeader header                     = 1;
     required ProtoBlockBase blockbase                 = 2;
@@ -290,8 +304,8 @@ message ProtoFallbackBlock
         required ByteArray leadernetworkinfo = 6;
         required ByteArray leaderpubkey      = 7;
         required uint32 shardid              = 8;
-        required ByteArray timestamp         = 9;
-        required bytes committeehash         = 10;
+        required bytes committeehash         = 9;
+        required bytes prevhash              = 10;
     }
     required FallbackBlockHeader header      = 1;
     required ProtoBlockBase blockbase        = 2;
@@ -312,9 +326,16 @@ message DSPoWSubmission
         required uint64 nonce              = 5;
         required string resultinghash      = 6;
         required string mixhash            = 7;
+        required uint32 lookupid           = 8;
+        required ByteArray gasprice        = 9;
     }
     required Data data                     = 1;
     required ByteArray signature           = 2;
+}
+
+message DSPoWPacketSubmission
+{
+    repeated DSPoWSubmission dsPowSubmissions        = 1;
 }
 
 message DSMicroBlockSubmission
@@ -322,7 +343,7 @@ message DSMicroBlockSubmission
     required uint32 microblocktype       = 1; // only LSB used
     required uint64 epochnumber          = 2;
     repeated ProtoMicroBlock microblocks = 3;
-    optional bytes statedelta            = 4;
+    repeated bytes statedeltas           = 4;
 }
 
 message DSDSBlockAnnouncement
@@ -335,7 +356,8 @@ message DSDSBlockAnnouncement
 
 message DSFinalBlockAnnouncement
 {
-    required ProtoTxBlock txblock = 1;
+    required ProtoTxBlock txblock       = 1;
+    optional ProtoMicroBlock microblock = 2;
 }
 
 message DSVCBlockAnnouncement
@@ -513,9 +535,9 @@ message LookupGetStateFromSeed
 
 message LookupSetStateFromSeed
 {
-    required ByteArray accounts  = 1;
-    required ByteArray pubkey    = 2;
-    required ByteArray signature = 3;
+    required ByteArray accountstore          = 1;
+    required ByteArray pubkey                = 2;
+    required ByteArray signature             = 3;
 }
 
 message LookupSetLookupOffline
@@ -724,8 +746,6 @@ message ProtoSingleDirectoryBlock
     }
 }
     
-
-
 message LookupGetDirectoryBlocksFromSeed
 {
     required uint32 portno      = 1;
@@ -738,3 +758,25 @@ message LookupSetDirectoryBlocksFromSeed
     repeated ProtoSingleDirectoryBlock dirblocks = 2;
 }
 
+// ============================================================================
+// View change pre check messages
+// ============================================================================
+
+// From node undergoing vc pre check to fetch latest blocks
+message LookupGetDSTxBlockFromSeed
+{
+    required uint64 dslowblocknum            = 1;
+    required uint64 dshighblocknum           = 2;
+    required uint64 txlowblocknum            = 3;
+    required uint64 txhighblocknum           = 4;
+    required uint32 listenport               = 5;
+}
+
+// From lookup nodes to node under going vc pre check
+message VCNodeSetDSTxBlockFromSeed
+{
+    repeated ProtoDSBlock dsblocks   = 1;
+    repeated ProtoTxBlock txblocks   = 2;
+    required ByteArray pubkey        = 3;
+    required ByteArray signature     = 4;
+}

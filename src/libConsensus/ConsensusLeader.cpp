@@ -861,7 +861,6 @@ bool ConsensusLeader::StartConsensus(
         LOG_GENERAL(
             INFO, "Sufficient commits obtained after timeout. Required = "
                       << m_numForConsensus << " Actual = " << m_commitCounter);
-        lock_guard<mutex> g(m_mutex);
         GenerateConsensusSubsets();
         StartConsensusSubsets();
       }

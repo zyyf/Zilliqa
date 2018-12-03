@@ -40,6 +40,8 @@ enum DSInstructionType : unsigned char {
   MICROBLOCKSUBMISSION = 0x03,
   FINALBLOCKCONSENSUS = 0x04,
   VIEWCHANGECONSENSUS = 0x05,
+  VCPUSHLATESTDSTXBLOCK = 0x06,
+  POWPACKETSUBMISSION = 0x07
 };
 
 enum NodeInstructionType : unsigned char {
@@ -54,8 +56,9 @@ enum NodeInstructionType : unsigned char {
   FORWARDTXNPACKET = 0x08,
   FALLBACKCONSENSUS = 0x09,
   FALLBACKBLOCK = 0x0A,
+  PROPOSEGASPRICE = 0x0B,
 #ifdef HEARTBEAT_TEST
-  HEARTBEATKILLPULSE = 0x0B,
+  HEARTBEATKILLPULSE = 0x0C,
 #endif  // HEARTBEAT_TEST
 };
 
@@ -92,6 +95,7 @@ enum LookupInstructionType : unsigned char {
   SETDIRBLOCKSFROMSEED = 0x1D,
   GETSTATEDELTAFROMSEED = 0x1E,
   SETSTATEDELTAFROMSEED = 0x1F,
+  VCGETLATESTDSTXBLOCK = 0x20,
 };
 
 enum TxSharingMode : unsigned char {

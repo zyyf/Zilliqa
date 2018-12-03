@@ -24,7 +24,7 @@
 using namespace std;
 using namespace boost::multiprecision;
 
-DSBlockHeader::DSBlockHeader() { m_blockNum = (uint64_t)-1; }
+DSBlockHeader::DSBlockHeader() : m_blockNum(INIT_BLOCK_NUMBER) {}
 
 DSBlockHeader::DSBlockHeader(const vector<unsigned char>& src,
                              unsigned int offset) {
@@ -38,7 +38,7 @@ DSBlockHeader::DSBlockHeader(const uint8_t dsDifficulty,
                              const BlockHash& prevHash,
                              const PubKey& leaderPubKey,
                              const uint64_t& blockNum, const uint64_t& epochNum,
-                             const uint256_t& timestamp, const SWInfo& swInfo,
+                             const uint128_t& gasPrice, const SWInfo& swInfo,
                              const map<PubKey, Peer>& powDSWinners,
                              const DSBlockHashSet& hashset,
                              const CommitteeHash& committeeHash)
@@ -49,7 +49,7 @@ DSBlockHeader::DSBlockHeader(const uint8_t dsDifficulty,
       m_leaderPubKey(leaderPubKey),
       m_blockNum(blockNum),
       m_epochNum(epochNum),
-      m_timestamp(timestamp),
+      m_gasPrice(gasPrice),
       m_swInfo(swInfo),
       m_PoWDSWinners(powDSWinners),
       m_hashset(hashset) {}
@@ -62,6 +62,22 @@ bool DSBlockHeader::Serialize(vector<unsigned char>& dst,
   }
 
   return true;
+}
+
+BlockHash DSBlockHeader::GetHashForRandom() const {
+  SHA2<HASH_TYPE::HASH_VARIANT_256> sha2;
+  std::vector<unsigned char> vec;
+
+  if (!Messenger::SetDSBlockHeader(vec, 0, *this, true)) {
+    LOG_GENERAL(WARNING, "Messenger::SetDSBlockHeader failed.");
+    return BlockHash();
+  }
+
+  sha2.Update(vec);
+  const std::vector<unsigned char>& resVec = sha2.Finalize();
+  BlockHash blockHash;
+  std::copy(resVec.begin(), resVec.end(), blockHash.asArray().begin());
+  return blockHash;
 }
 
 bool DSBlockHeader::Deserialize(const vector<unsigned char>& src,
@@ -86,7 +102,7 @@ const uint64_t& DSBlockHeader::GetBlockNum() const { return m_blockNum; }
 
 const uint64_t& DSBlockHeader::GetEpochNum() const { return m_epochNum; }
 
-const uint256_t& DSBlockHeader::GetTimestamp() const { return m_timestamp; }
+const uint128_t& DSBlockHeader::GetGasPrice() const { return m_gasPrice; }
 
 const SWInfo& DSBlockHeader::GetSWInfo() const { return m_swInfo; }
 
@@ -109,9 +125,9 @@ DSBlockHeader::GetHashSetReservedField() const {
 
 bool DSBlockHeader::operator==(const DSBlockHeader& header) const {
   return tie(m_dsDifficulty, m_difficulty, m_prevHash, m_leaderPubKey,
-             m_blockNum, m_timestamp, m_swInfo, m_PoWDSWinners) ==
+             m_blockNum, m_gasPrice, m_swInfo, m_PoWDSWinners) ==
          tie(header.m_dsDifficulty, header.m_difficulty, header.m_prevHash,
-             header.m_leaderPubKey, header.m_blockNum, header.m_timestamp,
+             header.m_leaderPubKey, header.m_blockNum, header.m_gasPrice,
              header.m_swInfo, header.m_PoWDSWinners);
 }
 

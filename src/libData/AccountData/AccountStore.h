@@ -23,9 +23,13 @@
 #include <json/json.h>
 #include <map>
 #include <set>
+#include <shared_mutex>
 #include <unordered_map>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 
 #include "Account.h"
 #include "AccountStoreSC.h"
@@ -79,7 +83,13 @@ class AccountStore
   std::unordered_map<Address, Account> m_addressToAccountRevChanged;
   std::unordered_map<Address, Account> m_addressToAccountRevCreated;
 
+  // primary mutex used by account store for protecting permanent states from
+  // external access
+  mutable std::shared_timed_mutex m_mutexPrimary;
+  // mutex used when manipulating with state delta
   std::mutex m_mutexDelta;
+  // mutex related to reversibles
+  std::mutex m_mutexReversibles;
 
   std::vector<unsigned char> m_stateDeltaSerialized;
 
@@ -92,6 +102,9 @@ class AccountStore
  public:
   /// Returns the singleton AccountStore instance.
   static AccountStore& GetInstance();
+
+  bool Serialize(std::vector<unsigned char>& src,
+                 unsigned int offset) const override;
 
   bool Deserialize(const std::vector<unsigned char>& src,
                    unsigned int offset) override;
@@ -143,11 +156,11 @@ class AccountStore
     UpdateStateTrie(address, account);
   }
 
-  boost::multiprecision::uint256_t GetNonceTemp(const Address& address);
+  boost::multiprecision::uint128_t GetNonceTemp(const Address& address);
 
   bool UpdateCoinbaseTemp(const Address& rewardee,
                           const Address& genesisAddress,
-                          const boost::multiprecision::uint256_t& amount);
+                          const boost::multiprecision::uint128_t& amount);
 
   StateHash GetStateDeltaHash();
 

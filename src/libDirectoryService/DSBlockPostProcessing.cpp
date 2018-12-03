@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iterator>
 #include <thread>
 
 #include "DirectoryService.h"
@@ -31,8 +32,8 @@
 #include "libCrypto/Sha2.h"
 #include "libMediator/Mediator.h"
 #include "libMessage/Messenger.h"
+#include "libNetwork/Guard.h"
 #include "libNetwork/P2PComm.h"
-#include "libNetwork/Whitelist.h"
 #include "libUtils/DataConversion.h"
 #include "libUtils/DetachedFunction.h"
 #include "libUtils/HashUtils.h"
@@ -61,7 +62,7 @@ void DirectoryService::StoreDSBlockToStorage() {
           << std::to_string(m_pendingDSBlock->GetHeader().GetDSDifficulty())
           << ", Difficulty: "
           << std::to_string(m_pendingDSBlock->GetHeader().GetDifficulty())
-          << ", Timestamp: " << m_pendingDSBlock->GetHeader().GetTimestamp());
+          << ", Timestamp: " << m_pendingDSBlock->GetTimestamp());
 
   if (result == -1) {
     LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
@@ -301,8 +302,11 @@ void DirectoryService::UpdateMyDSModeAndConsensusId() {
 
   uint16_t lastBlockHash = 0;
   if (m_mediator.m_currentEpochNum > 1) {
-    lastBlockHash = DataConversion::charArrTo16Bits(
-        m_mediator.m_txBlockChain.GetLastBlock().GetBlockHash().asBytes());
+    lastBlockHash =
+        DataConversion::charArrTo16Bits(m_mediator.m_dsBlockChain.GetLastBlock()
+                                            .GetHeader()
+                                            .GetHashForRandom()
+                                            .asBytes());
   }
   // Check if I am the oldest backup DS (I will no longer be part of the DS
   // committee)
@@ -318,9 +322,27 @@ void DirectoryService::UpdateMyDSModeAndConsensusId() {
                          << m_mediator.m_selfPeer.GetPrintableIPAddress()
                          << "][      ] IDLE");
   } else {
-    m_consensusMyID += numOfIncomingDs;
-    m_consensusLeaderID = lastBlockHash % (m_mediator.m_DSCommittee->size());
-    LOG_GENERAL(INFO, "m_consensusLeaderID " << m_consensusLeaderID);
+    if (!GUARD_MODE) {
+      m_consensusMyID += numOfIncomingDs;
+      m_consensusLeaderID = lastBlockHash % (m_mediator.m_DSCommittee->size());
+      LOG_GENERAL(INFO, "No DS Guard enabled. m_consensusLeaderID "
+                            << m_consensusLeaderID);
+
+    } else {
+      // DS guards index do not change
+      if (m_consensusMyID >= Guard::GetInstance().GetNumOfDSGuard()) {
+        m_consensusMyID += numOfIncomingDs;
+        LOG_GENERAL(INFO,
+                    "Not a DS Guard. m_consensusMyID: " << m_consensusMyID);
+      } else {
+        LOG_GENERAL(INFO, "DS Guard. m_consensusMyID: " << m_consensusMyID);
+      }
+      // Only DS guard can be ds leader
+      m_consensusLeaderID =
+          lastBlockHash % Guard::GetInstance().GetNumOfDSGuard();
+      LOG_GENERAL(INFO, "DS Guard enabled. m_consensusLeaderID "
+                            << m_consensusLeaderID);
+    }
 
     if (m_mediator.m_DSCommittee->at(m_consensusLeaderID).first ==
         m_mediator.m_selfKey.second) {
@@ -357,13 +379,28 @@ void DirectoryService::UpdateDSCommiteeComposition() {
 
   const map<PubKey, Peer> NewDSMembers =
       m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetDSPoWWinners();
+  deque<pair<PubKey, Peer>>::iterator it;
+
   for (const auto& DSPowWinner : NewDSMembers) {
     m_allPoWConns.erase(DSPowWinner.first);
     if (m_mediator.m_selfKey.second == DSPowWinner.first) {
-      m_mediator.m_DSCommittee->emplace_front(m_mediator.m_selfKey.second,
-                                              Peer());
+      if (!GUARD_MODE) {
+        m_mediator.m_DSCommittee->emplace_front(m_mediator.m_selfKey.second,
+                                                Peer());
+      } else {
+        it = m_mediator.m_DSCommittee->begin() +
+             (Guard::GetInstance().GetNumOfDSGuard());
+        m_mediator.m_DSCommittee->emplace(it, m_mediator.m_selfKey.second,
+                                          Peer());
+      }
     } else {
-      m_mediator.m_DSCommittee->emplace_front(DSPowWinner);
+      if (!GUARD_MODE) {
+        m_mediator.m_DSCommittee->emplace_front(DSPowWinner);
+      } else {
+        it = m_mediator.m_DSCommittee->begin() +
+             (Guard::GetInstance().GetNumOfDSGuard());
+        m_mediator.m_DSCommittee->emplace(it, DSPowWinner);
+      }
     }
     m_mediator.m_DSCommittee->pop_back();
   }
@@ -393,6 +430,7 @@ void DirectoryService::StartFirstTxEpoch() {
     std::lock_guard<mutex> lock(m_mutexMicroBlocks);
     m_microBlocks.clear();
     m_missingMicroBlocks.clear();
+    m_microBlockStateDeltas.clear();
     m_totalTxnFees = 0;
   }
 
@@ -440,11 +478,6 @@ void DirectoryService::StartFirstTxEpoch() {
     m_mediator.m_node->CommitTxnPacketBuffer();
     m_stateDeltaFromShards.clear();
 
-    if (TEST_NET_MODE) {
-      LOG_GENERAL(INFO, "Updating shard whitelist");
-      Whitelist::GetInstance().UpdateShardWhitelist();
-    }
-
     // Start sharding work
     SetState(MICROBLOCK_SUBMISSION);
 
@@ -456,7 +489,7 @@ void DirectoryService::StartFirstTxEpoch() {
                1
         << "] BEGIN");
 
-    m_dsStartedMicroblockConsensus = false;
+    m_stopRecvNewMBSubmission = false;
 
     if (BROADCAST_GOSSIP_MODE) {
       std::vector<Peer> peers;
@@ -489,23 +522,8 @@ void DirectoryService::StartFirstTxEpoch() {
                          1
                   << "] TIMEOUT: Didn't receive all Microblock.");
 
-        auto func = [this]() mutable -> void {
-          m_dsStartedMicroblockConsensus = true;
-          m_mediator.m_node->RunConsensusOnMicroBlock();
-        };
-
-        DetachedFunction(1, func);
-
-        std::unique_lock<std::mutex> cv_lk(m_MutexScheduleFinalBlockConsensus);
-        if (cv_scheduleFinalBlockConsensus.wait_for(
-                cv_lk,
-                std::chrono::seconds(DS_MICROBLOCK_CONSENSUS_OBJECT_TIMEOUT)) ==
-            std::cv_status::timeout) {
-          LOG_GENERAL(WARNING,
-                      "Timeout: Didn't finish DS Microblock. Proceeds "
-                      "without it");
-          RunConsensusOnFinalBlock(DirectoryService::REVERT_STATEDELTA);
-        }
+        m_stopRecvNewMBSubmission = true;
+        RunConsensusOnFinalBlock();
       }
     };
     DetachedFunction(1, func);
@@ -539,19 +557,6 @@ void DirectoryService::StartFirstTxEpoch() {
 
     // Process txn sharing assignments as a shard node
     m_mediator.m_node->LoadTxnSharingInfo();
-
-    if (BROADCAST_GOSSIP_MODE) {
-      std::vector<Peer> peers;
-      for (const auto& i : *m_mediator.m_node->m_myShardMembers) {
-        if (i.second != Peer()) {
-          peers.emplace_back(i.second);
-        }
-      }
-
-      // Set the peerlist for RumorSpreading protocol since am no more DS
-      // member. I am now shard member.
-      P2PComm::GetInstance().InitializeRumorManager(peers);
-    }
 
     // Finally, start as a shard node
     m_mediator.m_node->StartFirstTxEpoch();
@@ -602,12 +607,12 @@ void DirectoryService::ProcessDSBlockConsensusWhenDone(
     }
   }
 
-  {
-    lock_guard<mutex> h(m_mutexCoinbaseRewardees);
-    m_coinbaseRewardees.clear();
-  }
   // Add the DS block to the chain
   StoreDSBlockToStorage();
+
+  m_mediator.m_node->m_proposedGasPrice =
+      max(m_mediator.m_node->m_proposedGasPrice,
+          m_pendingDSBlock->GetHeader().GetGasPrice());
 
   m_mediator.UpdateDSBlockRand();
 
@@ -629,6 +634,12 @@ void DirectoryService::ProcessDSBlockConsensusWhenDone(
   {
     // USe mutex during the composition and sending of vcds block message
     lock_guard<mutex> g(m_mutexVCBlockVector);
+
+    // Before sending ds block to lookup/other shard-nodes and starting my 1st
+    // txn epoch from this ds epoch, lets give enough time for all other ds
+    // nodes to receive DS block - final cosig
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(DELAY_FIRSTXNEPOCH_IN_MS));
 
     LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
               "DSBlock to be sent to the lookup nodes");
@@ -770,7 +781,7 @@ bool DirectoryService::ProcessDSBlockConsensus(
           cv_lk, std::chrono::seconds(CONSENSUS_MSG_ORDER_BLOCK_WINDOW),
           [this, message, offset]() -> bool {
             lock_guard<mutex> g(m_mutexConsensus);
-            if (m_mediator.m_lookup->m_syncType != SyncType::NO_SYNC) {
+            if (m_mediator.m_lookup->GetSyncType() != SyncType::NO_SYNC) {
               LOG_GENERAL(WARNING,
                           "The node started the process of rejoining, "
                           "Ignore rest of "

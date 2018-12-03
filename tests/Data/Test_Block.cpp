@@ -79,11 +79,11 @@ BOOST_AUTO_TEST_CASE(DSBlock_test) {
   uint8_t diff2 = header2.GetDifficulty();
   const std::array<unsigned char, BLOCK_HASH_SIZE>& prevHash2 =
       header2.GetPrevHash();
-  uint256_t nonce2 = header2.GetNonce();
+  uint128_t nonce2 = header2.GetNonce();
   const std::array<unsigned char, PUB_KEY_SIZE>& pubKey2 =
       header2.GetMinerPubKey();
-  uint256_t blockNum2 = header2.GetBlockNum();
-  uint256_t timestamp2 = header2.GetTimestamp();
+  uint128_t blockNum2 = header2.GetBlockNum();
+  uint64_t timestamp2 = header2.GetTimestamp();
   const std::array<unsigned char, BLOCK_SIG_SIZE>& signature2 =
       block2.GetSignature();
 
@@ -281,18 +281,18 @@ BOOST_AUTO_TEST_CASE(TxBlock_test) {
   TxBlockHeader header2 = block2.GetHeader();
   uint8_t type2 = header2.GetType();
   uint32_t version2 = header2.GetVersion();
-  uint256_t gasLimit2 = header2.GetGasLimit();
-  uint256_t gasUsed2 = header2.GetGasUsed();
+  uint128_t gasLimit2 = header2.GetGasLimit();
+  uint128_t gasUsed2 = header2.GetGasUsed();
   const std::array<unsigned char, BLOCK_HASH_SIZE>& prevHash2 =
       header2.GetPrevHash();
-  uint256_t blockNum2 = header2.GetBlockNum();
-  uint256_t timestamp2 = header2.GetTimestamp();
+  uint128_t blockNum2 = header2.GetBlockNum();
+  uint64_t timestamp2 = header2.GetTimestamp();
   const std::array<unsigned char, TRAN_HASH_SIZE>& txRootHash2 =
       header2.GetTxRootHash();
   uint32_t numTxs2 = header2.GetNumTxs();
   const std::array<unsigned char, PUB_KEY_SIZE>& pubKey2 =
       header2.GetMinerPubKey();
-  uint256_t dsBlockNum2 = header2.GetDSBlockNum();
+  uint128_t dsBlockNum2 = header2.GetDSBlockNum();
   const std::array<unsigned char, BLOCK_HASH_SIZE>& dsBlockHeader2 =
       header2.GetDSBlockHeader();
 
@@ -328,8 +328,8 @@ BOOST_AUTO_TEST_CASE(TxBlock_test) {
       "0D3979DA06841562C90DE5212BE5EFCF88FAEA17118945B6B49D304DE295E407";
   std::vector<unsigned char> expectedVec =
       DataConversion::HexStrToUint8Vec(expectedStr);
-  bool is_prevHash_equal =
-      std::equal(byteVec.begin(), byteVec.end(), expectedVec.begin());
+  bool is_prevHash_equal = std::equal(byteVec.begin(), byteVec.end(),
+                                      expectedVec.begin(), expectedVec.end());
   BOOST_CHECK_MESSAGE(
       is_prevHash_equal == true,
       "expected: " << expectedStr
@@ -352,8 +352,8 @@ BOOST_AUTO_TEST_CASE(TxBlock_test) {
       "4A740D0FA29B841C6D99B02892273F7D00518EF12DAFA2AD4D198E630789CF3B";
   expectedVec.clear();
   expectedVec = DataConversion::HexStrToUint8Vec(expectedStr);
-  bool is_txRootHash_equal =
-      std::equal(byteVec.begin(), byteVec.end(), expectedVec.begin());
+  bool is_txRootHash_equal = std::equal(byteVec.begin(), byteVec.end(),
+                                        expectedVec.begin(), expectedVec.end());
   BOOST_CHECK_MESSAGE(
       is_txRootHash_equal == true,
       "expected: " << expectedStr

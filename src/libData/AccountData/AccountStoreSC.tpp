@@ -55,12 +55,12 @@ bool AccountStoreSC<MAP>::UpdateAccounts(const uint64_t& blockNum,
   const Address fromAddr = Account::GetAddressFromPublicKey(senderPubKey);
   Address toAddr = transaction.GetToAddr();
 
-  const boost::multiprecision::uint256_t& amount = transaction.GetAmount();
+  const boost::multiprecision::uint128_t& amount = transaction.GetAmount();
 
-  boost::multiprecision::uint256_t gasRemained = transaction.GetGasLimit();
+  uint64_t gasRemained = transaction.GetGasLimit();
 
-  boost::multiprecision::uint256_t gasDeposit;
-  if (!SafeMath<boost::multiprecision::uint256_t>::mul(
+  boost::multiprecision::uint128_t gasDeposit;
+  if (!SafeMath<boost::multiprecision::uint128_t>::mul(
           gasRemained, transaction.GetGasPrice(), gasDeposit)) {
     return false;
   }
@@ -145,6 +145,10 @@ bool AccountStoreSC<MAP>::UpdateAccounts(const uint64_t& blockNum,
     toAddr = Account::GetAddressForContract(fromAddr, fromAccount->GetNonce());
     this->AddAccount(toAddr, {0, 0});
     Account* toAccount = this->GetAccount(toAddr);
+    if (toAccount == nullptr) {
+      LOG_GENERAL(WARNING, "toAccount is null ptr");
+      return false;
+    }
     toAccount->SetCode(transaction.GetCode());
     // Store the immutable states
     toAccount->InitContract(transaction.GetData());
@@ -155,6 +159,18 @@ bool AccountStoreSC<MAP>::UpdateAccounts(const uint64_t& blockNum,
 
     ExportCreateContractFiles(*toAccount);
 
+    // Undergo scilla checker
+    bool ret_checker = true;
+    std::string checkerPrint;
+    if (!SysCommand::ExecuteCmdWithOutput(GetContractCheckerCmdStr(),
+                                          checkerPrint)) {
+      ret_checker = false;
+    }
+    if (ret_checker && !ParseContractCheckerOutput(checkerPrint)) {
+      ret_checker = false;
+    }
+
+    // Undergo scilla runner
     bool ret = true;
     std::string runnerPrint;
     if (!SysCommand::ExecuteCmdWithOutput(GetCreateContractCmdStr(gasRemained),
@@ -168,14 +184,14 @@ bool AccountStoreSC<MAP>::UpdateAccounts(const uint64_t& blockNum,
       gasRemained = std::min(transaction.GetGasLimit() - CONTRACT_CREATE_GAS,
                              gasRemained);
     }
-    boost::multiprecision::uint256_t gasRefund;
-    if (!SafeMath<boost::multiprecision::uint256_t>::mul(
+    boost::multiprecision::uint128_t gasRefund;
+    if (!SafeMath<boost::multiprecision::uint128_t>::mul(
             gasRemained, transaction.GetGasPrice(), gasRefund)) {
       this->m_addressToAccount->erase(toAddr);
       return false;
     }
     this->IncreaseBalance(fromAddr, gasRefund);
-    if (!ret) {
+    if (!ret || !ret_checker) {
       this->m_addressToAccount->erase(toAddr);
 
       receipt.SetResult(false);
@@ -283,8 +299,8 @@ bool AccountStoreSC<MAP>::UpdateAccounts(const uint64_t& blockNum,
     } else {
       CommitTransferBalanceAtomic();
     }
-    boost::multiprecision::uint256_t gasRefund;
-    if (!SafeMath<boost::multiprecision::uint256_t>::mul(
+    boost::multiprecision::uint128_t gasRefund;
+    if (!SafeMath<boost::multiprecision::uint128_t>::mul(
             gasRemained, transaction.GetGasPrice(), gasRefund)) {
       return false;
     }
@@ -420,40 +436,63 @@ void AccountStoreSC<MAP>::ExportCallContractFiles(
 }
 
 template <class MAP>
+std::string AccountStoreSC<MAP>::GetContractCheckerCmdStr() {
+  std::string ret =
+      SCILLA_CHECKER + " -libdir " + SCILLA_LIB + " " + INPUT_CODE;
+  LOG_GENERAL(INFO, ret);
+  return ret;
+}
+
+template <class MAP>
 std::string AccountStoreSC<MAP>::GetCreateContractCmdStr(
-    const boost::multiprecision::uint256_t& available_gas) {
+    const uint64_t& available_gas) {
   std::string ret = SCILLA_BINARY + " -init " + INIT_JSON + " -iblockchain " +
                     INPUT_BLOCKCHAIN_JSON + " -o " + OUTPUT_JSON + " -i " +
                     INPUT_CODE + " -libdir " + SCILLA_LIB + " -gaslimit " +
-                    available_gas.convert_to<std::string>();
+                    std::to_string(available_gas);
   LOG_GENERAL(INFO, ret);
   return ret;
 }
 
 template <class MAP>
 std::string AccountStoreSC<MAP>::GetCallContractCmdStr(
-    const boost::multiprecision::uint256_t& available_gas) {
+    const uint64_t& available_gas) {
   std::string ret = SCILLA_BINARY + " -init " + INIT_JSON + " -istate " +
                     INPUT_STATE_JSON + " -iblockchain " +
                     INPUT_BLOCKCHAIN_JSON + " -imessage " + INPUT_MESSAGE_JSON +
                     " -o " + OUTPUT_JSON + " -i " + INPUT_CODE + " -libdir " +
-                    SCILLA_LIB + " -gaslimit " +
-                    available_gas.convert_to<std::string>();
+                    SCILLA_LIB + " -gaslimit " + std::to_string(available_gas);
   LOG_GENERAL(INFO, ret);
   return ret;
 }
 
 template <class MAP>
-bool AccountStoreSC<MAP>::ParseCreateContractOutput(
-    boost::multiprecision::uint256_t& gasRemained,
-    const std::string& runnerPrint) {
-  // LOG_MARKER();
-
-  std::ifstream in(OUTPUT_JSON, std::ios::binary);
+bool AccountStoreSC<MAP>::ParseContractCheckerOutput(
+    const std::string& checkerPrint) {
   Json::CharReaderBuilder builder;
   std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
   Json::Value root;
-  std::string errors, outStr;
+  std::string errors;
+
+  if (!reader->parse(checkerPrint.c_str(),
+                     checkerPrint.c_str() + checkerPrint.size(), &root,
+                     &errors)) {
+    LOG_GENERAL(WARNING, "Failed to parse contract checker output: "
+                             << checkerPrint << std::endl
+                             << "errors: " << errors);
+    return false;
+  }
+
+  return true;
+}
+
+template <class MAP>
+bool AccountStoreSC<MAP>::ParseCreateContractOutput(
+    uint64_t& gasRemained, const std::string& runnerPrint) {
+  // LOG_MARKER();
+
+  std::ifstream in(OUTPUT_JSON, std::ios::binary);
+  std::string outStr;
 
   if (!in.is_open()) {
     LOG_GENERAL(WARNING,
@@ -466,23 +505,27 @@ bool AccountStoreSC<MAP>::ParseCreateContractOutput(
       return false;
     }
   } else {
-    std::string outStr{std::istreambuf_iterator<char>(in),
-                       std::istreambuf_iterator<char>()};
+    outStr = {std::istreambuf_iterator<char>(in),
+              std::istreambuf_iterator<char>()};
   }
   LOG_GENERAL(INFO, "Output: " << std::endl << outStr);
+
+  Json::CharReaderBuilder builder;
+  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+  Json::Value root;
+  std::string errors;
 
   if (reader->parse(outStr.c_str(), outStr.c_str() + outStr.size(), &root,
                     &errors)) {
     return ParseCreateContractJsonOutput(root, gasRemained);
-  } else {
-    LOG_GENERAL(WARNING, "Failed to parse contract output json: " << errors);
-    return false;
   }
+  LOG_GENERAL(WARNING, "Failed to parse contract output json: " << errors);
+  return false;
 }
 
 template <class MAP>
 bool AccountStoreSC<MAP>::ParseCreateContractJsonOutput(
-    const Json::Value& _json, boost::multiprecision::uint256_t& gasRemained) {
+    const Json::Value& _json, uint64_t& gasRemained) {
   // LOG_MARKER();
   if (!_json.isMember("gas_remaining")) {
     LOG_GENERAL(
@@ -522,15 +565,11 @@ bool AccountStoreSC<MAP>::ParseCreateContractJsonOutput(
 
 template <class MAP>
 bool AccountStoreSC<MAP>::ParseCallContractOutput(
-    boost::multiprecision::uint256_t& gasRemained,
-    const std::string& runnerPrint) {
+    uint64_t& gasRemained, const std::string& runnerPrint) {
   // LOG_MARKER();
 
   std::ifstream in(OUTPUT_JSON, std::ios::binary);
-  Json::CharReaderBuilder builder;
-  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
-  Json::Value root;
-  std::string errors, outStr;
+  std::string outStr;
 
   if (!in.is_open()) {
     LOG_GENERAL(WARNING,
@@ -543,23 +582,27 @@ bool AccountStoreSC<MAP>::ParseCallContractOutput(
       return false;
     }
   } else {
-    std::string outStr{std::istreambuf_iterator<char>(in),
-                       std::istreambuf_iterator<char>()};
+    outStr = {std::istreambuf_iterator<char>(in),
+              std::istreambuf_iterator<char>()};
   }
   LOG_GENERAL(INFO, "Output: " << std::endl << outStr);
+
+  Json::CharReaderBuilder builder;
+  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+  Json::Value root;
+  std::string errors;
 
   if (reader->parse(outStr.c_str(), outStr.c_str() + outStr.size(), &root,
                     &errors)) {
     return ParseCallContractJsonOutput(root, gasRemained);
-  } else {
-    LOG_GENERAL(WARNING, "Failed to parse contract output json: " << errors);
-    return false;
   }
+  LOG_GENERAL(WARNING, "Failed to parse contract output json: " << errors);
+  return false;
 }
 
 template <class MAP>
-bool AccountStoreSC<MAP>::ParseCallContractJsonOutput(
-    const Json::Value& _json, boost::multiprecision::uint256_t& gasRemained) {
+bool AccountStoreSC<MAP>::ParseCallContractJsonOutput(const Json::Value& _json,
+                                                      uint64_t& gasRemained) {
   // LOG_MARKER();
   if (!_json.isMember("gas_remaining")) {
     LOG_GENERAL(
@@ -574,6 +617,12 @@ bool AccountStoreSC<MAP>::ParseCallContractJsonOutput(
   }
   gasRemained = atoi(_json["gas_remaining"].asString().c_str());
 
+  if (!_json.isMember("_accepted")) {
+    LOG_GENERAL(WARNING,
+                "The json output of this contract doesn't contain _accepted");
+    return false;
+  }
+
   if (!_json.isMember("message") || !_json.isMember("states") ||
       !_json.isMember("events")) {
     if (_json.isMember("errors")) {
@@ -584,17 +633,7 @@ bool AccountStoreSC<MAP>::ParseCallContractJsonOutput(
     return false;
   }
 
-  if (!_json["message"].isMember("_tag") ||
-      !_json["message"].isMember("_amount") ||
-      !_json["message"].isMember("params") ||
-      !_json["message"].isMember("_recipient") ||
-      !_json["message"].isMember("_accepted")) {
-    LOG_GENERAL(WARNING,
-                "The message in the json output of this contract is corrupted");
-    return false;
-  }
-
-  if (_json["message"]["_accepted"].asString() == "true") {
+  if (_json["_accepted"].asString() == "true") {
     // LOG_GENERAL(INFO, "Contract accept amount transfer");
     if (!TransferBalanceAtomic(m_curSenderAddr, m_curContractAddr,
                                m_curAmount)) {
@@ -619,6 +658,10 @@ bool AccountStoreSC<MAP>::ParseCallContractJsonOutput(
                             : JSONUtils::convertJsontoStr(s["value"]);
 
     Account* contractAccount = this->GetAccount(m_curContractAddr);
+    if (contractAccount == nullptr) {
+      LOG_GENERAL(WARNING, "contractAccount is null ptr");
+      return false;
+    }
     if (vname != "_balance") {
       contractAccount->SetStorage(vname, type, value);
     }
@@ -630,6 +673,24 @@ bool AccountStoreSC<MAP>::ParseCallContractJsonOutput(
       return false;
     }
     m_curTranReceipt.AddEntry(entry);
+  }
+
+  // If output message is null
+  if (_json["message"].isNull()) {
+    LOG_GENERAL(INFO,
+                "null message in scilla output when invoking a "
+                "contract, transaction finished");
+    return true;
+  }
+
+  // Non-null messages must have few mandatory fields.
+  if (!_json["message"].isMember("_tag") ||
+      !_json["message"].isMember("_amount") ||
+      !_json["message"].isMember("params") ||
+      !_json["message"].isMember("_recipient")) {
+    LOG_GENERAL(WARNING,
+                "The message in the json output of this contract is corrupted");
+    return false;
   }
 
   Address recipient = Address(_json["message"]["_recipient"].asString());
@@ -713,7 +774,7 @@ bool AccountStoreSC<MAP>::ParseCallContractJsonOutput(
 template <class MAP>
 bool AccountStoreSC<MAP>::TransferBalanceAtomic(
     const Address& from, const Address& to,
-    const boost::multiprecision::uint256_t& delta) {
+    const boost::multiprecision::uint128_t& delta) {
   // LOG_MARKER();
   return m_accountStoreAtomic->TransferBalance(from, to, delta);
 }

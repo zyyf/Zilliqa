@@ -49,10 +49,10 @@ Transaction::Transaction(const vector<unsigned char>& src,
   Deserialize(src, offset);
 }
 
-Transaction::Transaction(const uint256_t& version, const uint256_t& nonce,
+Transaction::Transaction(const uint32_t& version, const uint64_t& nonce,
                          const Address& toAddr, const KeyPair& senderKeyPair,
-                         const uint256_t& amount, const uint256_t& gasPrice,
-                         const uint256_t& gasLimit,
+                         const uint128_t& amount, const uint128_t& gasPrice,
+                         const uint64_t& gasLimit,
                          const vector<unsigned char>& code,
                          const vector<unsigned char>& data)
     : m_coreInfo(version, nonce, toAddr, senderKeyPair.second, amount, gasPrice,
@@ -77,10 +77,10 @@ Transaction::Transaction(const uint256_t& version, const uint256_t& nonce,
   }
 }
 
-Transaction::Transaction(const TxnHash& tranID, const uint256_t& version,
-                         const uint256_t& nonce, const Address& toAddr,
-                         const PubKey& senderPubKey, const uint256_t& amount,
-                         const uint256_t& gasPrice, const uint256_t& gasLimit,
+Transaction::Transaction(const TxnHash& tranID, const uint32_t& version,
+                         const uint64_t& nonce, const Address& toAddr,
+                         const PubKey& senderPubKey, const uint128_t& amount,
+                         const uint128_t& gasPrice, const uint64_t& gasLimit,
                          const std::vector<unsigned char>& code,
                          const std::vector<unsigned char>& data,
                          const Signature& signature)
@@ -89,10 +89,10 @@ Transaction::Transaction(const TxnHash& tranID, const uint256_t& version,
                  gasLimit, code, data),
       m_signature(signature) {}
 
-Transaction::Transaction(const uint256_t& version, const uint256_t& nonce,
+Transaction::Transaction(const uint32_t& version, const uint64_t& nonce,
                          const Address& toAddr, const PubKey& senderPubKey,
-                         const uint256_t& amount, const uint256_t& gasPrice,
-                         const uint256_t& gasLimit,
+                         const uint128_t& amount, const uint128_t& gasPrice,
+                         const uint64_t& gasLimit,
                          const std::vector<unsigned char>& code,
                          const std::vector<unsigned char>& data,
                          const Signature& signature)
@@ -150,9 +150,9 @@ const TransactionCoreInfo& Transaction::GetCoreInfo() const {
   return m_coreInfo;
 }
 
-const uint256_t& Transaction::GetVersion() const { return m_coreInfo.version; }
+const uint32_t& Transaction::GetVersion() const { return m_coreInfo.version; }
 
-const uint256_t& Transaction::GetNonce() const { return m_coreInfo.nonce; }
+const uint64_t& Transaction::GetNonce() const { return m_coreInfo.nonce; }
 
 const Address& Transaction::GetToAddr() const { return m_coreInfo.toAddr; }
 
@@ -164,15 +164,13 @@ Address Transaction::GetSenderAddr() const {
   return Account::GetAddressFromPublicKey(GetSenderPubKey());
 }
 
-const uint256_t& Transaction::GetAmount() const { return m_coreInfo.amount; }
+const uint128_t& Transaction::GetAmount() const { return m_coreInfo.amount; }
 
-const uint256_t& Transaction::GetGasPrice() const {
+const uint128_t& Transaction::GetGasPrice() const {
   return m_coreInfo.gasPrice;
 }
 
-const uint256_t& Transaction::GetGasLimit() const {
-  return m_coreInfo.gasLimit;
-}
+const uint64_t& Transaction::GetGasLimit() const { return m_coreInfo.gasLimit; }
 
 const vector<unsigned char>& Transaction::GetCode() const {
   return m_coreInfo.code;
@@ -190,25 +188,19 @@ void Transaction::SetSignature(const Signature& signature) {
 
 unsigned int Transaction::GetShardIndex(const Address& fromAddr,
                                         unsigned int numShards) {
-  unsigned int target_shard = 0;
-  unsigned int numbits = log2(numShards);
-  unsigned int numbytes = numbits / 8;
-  unsigned int extrabits = numbits % 8;
+  uint32_t x = 0;
 
-  if (extrabits > 0) {
-    unsigned char msb_mask = 0;
-    for (unsigned int i = 0; i < extrabits; i++) {
-      msb_mask |= 1 << i;
-    }
-    target_shard =
-        fromAddr.asArray().at(ACC_ADDR_SIZE - numbytes - 1) & msb_mask;
+  if (numShards == 0) {
+    LOG_GENERAL(WARNING, "numShards is 0 and trying to calculate shard index");
+    return 0;
   }
 
-  for (unsigned int i = ACC_ADDR_SIZE - numbytes; i < ACC_ADDR_SIZE; i++) {
-    target_shard = (target_shard << 8) + fromAddr.asArray().at(i);
+  // Take the last four bytes of the address
+  for (unsigned int i = 0; i < 4; i++) {
+    x = (x << 8) | fromAddr.asArray().at(ACC_ADDR_SIZE - 4 + i);
   }
 
-  return target_shard;
+  return x % numShards;
 }
 
 bool Transaction::operator==(const Transaction& tran) const {

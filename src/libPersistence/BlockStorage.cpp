@@ -287,6 +287,16 @@ bool BlockStorage::DeleteDSBlock(const uint64_t& blocknum) {
   return (ret == 0);
 }
 
+bool BlockStorage::DeleteVCBlock(const BlockHash& blockhash) {
+  int ret = m_VCBlockDB->DeleteKey(blockhash);
+  return (ret == 0);
+}
+
+bool BlockStorage::DeleteFallbackBlock(const BlockHash& blockhash) {
+  int ret = m_fallbackBlockDB->DeleteKey(blockhash);
+  return (ret == 0);
+}
+
 bool BlockStorage::DeleteTxBlock(const uint64_t& blocknum) {
   LOG_GENERAL(INFO, "Delete TxBlock Num: " << blocknum);
   int ret = m_txBlockchainDB->DeleteKey(blocknum);
@@ -405,6 +415,37 @@ bool BlockStorage::GetAllTxBodiesTmp(std::list<TxnHash>& txnHashes) {
   }
 
   delete it;
+  return true;
+}
+
+bool BlockStorage::GetAllBlockLink(std::list<BlockLink>& blocklinks) {
+  LOG_MARKER();
+  leveldb::Iterator* it =
+      m_blockLinkDB->GetDB()->NewIterator(leveldb::ReadOptions());
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    string bns = it->key().ToString();
+    string blockString = it->value().ToString();
+    if (blockString.empty()) {
+      LOG_GENERAL(WARNING, "Lost one blocklink in the chain");
+      delete it;
+      return false;
+    }
+    BlockLink blcklink;
+    if (!Messenger::GetBlockLink(
+            vector<unsigned char>(blockString.begin(), blockString.end()), 0,
+            blcklink)) {
+      LOG_GENERAL(WARNING, "Deserialization of blockLink failed " << bns);
+      delete it;
+      return false;
+    }
+    blocklinks.emplace_back(blcklink);
+    LOG_GENERAL(INFO, "Retrievd BlockLink Num:" << bns);
+  }
+  delete it;
+  if (blocklinks.empty()) {
+    LOG_GENERAL(INFO, "Disk has no blocklink");
+    return false;
+  }
   return true;
 }
 
@@ -539,20 +580,10 @@ bool BlockStorage::PutShardStructure(const DequeOfShard& shards,
   return true;
 }
 
-bool BlockStorage::GetShardStructure(DequeOfShard& shards,
-                                     atomic<uint32_t>& myshardId) {
+bool BlockStorage::GetShardStructure(DequeOfShard& shards) {
   LOG_MARKER();
 
-  unsigned int index = 0;
-  string strMyshardId = m_shardStructureDB->Lookup(index++);
-
-  if (strMyshardId.empty()) {
-    LOG_GENERAL(WARNING, "Cannot retrieve sharding structure!");
-    return false;
-  }
-
-  myshardId = stoul(strMyshardId);
-  LOG_GENERAL(INFO, "Retrieved shard ID: " << myshardId);
+  unsigned int index = 1;
   string dataStr = m_shardStructureDB->Lookup(index++);
   Messenger::ArrayToShardStructure(
       vector<unsigned char>(dataStr.begin(), dataStr.end()), 0, shards);
@@ -565,15 +596,14 @@ bool BlockStorage::PutStateDelta(const uint64_t& finalBlockNum,
   LOG_MARKER();
 
   if (0 != m_stateDeltaDB->Insert(finalBlockNum, stateDelta)) {
-    LOG_GENERAL(WARNING, "Failed to store state delta of final block["
-                             << finalBlockNum << "]: "
-                             << DataConversion::Uint8VecToHexStr(stateDelta));
+    LOG_PAYLOAD(WARNING,
+                "Failed to store state delta of final block " << finalBlockNum,
+                stateDelta, Logger::MAX_BYTES_TO_DISPLAY);
     return false;
   }
 
-  LOG_GENERAL(INFO, "Stored state delta of final block["
-                        << finalBlockNum << "]: "
-                        << DataConversion::Uint8VecToHexStr(stateDelta));
+  LOG_PAYLOAD(INFO, "Stored state delta of final block " << finalBlockNum,
+              stateDelta, Logger::MAX_BYTES_TO_DISPLAY);
   return true;
 }
 
@@ -583,9 +613,8 @@ bool BlockStorage::GetStateDelta(const uint64_t& finalBlockNum,
 
   string dataStr = m_stateDeltaDB->Lookup(finalBlockNum);
   stateDelta = vector<unsigned char>(dataStr.begin(), dataStr.end());
-  LOG_GENERAL(INFO, "Retrieved state delta of final block["
-                        << finalBlockNum << "]: "
-                        << DataConversion::Uint8VecToHexStr(stateDelta));
+  LOG_PAYLOAD(INFO, "Retrieved state delta of final block " << finalBlockNum,
+              stateDelta, Logger::MAX_BYTES_TO_DISPLAY);
   return true;
 }
 

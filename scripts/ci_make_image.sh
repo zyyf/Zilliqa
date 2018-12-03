@@ -20,38 +20,37 @@
 #
 # Usage:
 #
-#    ./scripts/ci_make_image.sh        # build with 2 jobs
-#    ./scripts/ci_make_image.sh N      # build with N jobs
-#
+#    ./scripts/ci_make_image.sh zilliqa # make k8s-zilliqa
+#    ./scripts/ci_make_image.sh scilla  # make k8s-scilla
 
 set -e
+
+target=$1
+
+ext=""
+case $target in
+    zilliqa)
+        # Do nothing
+    ;;
+    scilla)
+        ext=".scilla"
+    ;;
+    *)
+        echo "Usage: $0 [zilliqa|scilla]"
+        exit 1
+    ;;
+esac
 
 docker --version
 aws --version
 
-[ -n "$1" ] && jobs=$1 || jobs=2
 commit=$(git rev-parse --short=7 ${TRAVIS_COMMIT})
 account_id=$(aws sts get-caller-identity --output text --query 'Account')
 region_id=us-west-2
-registry_url=${account_id}.dkr.ecr.${region_id}.amazonaws.com/zilliqa:${commit}
+source_image=zilliqa:${commit}${ext}
+target_image=${account_id}.dkr.ecr.${region_id}.amazonaws.com/zilliqa:${commit}${ext}
 
 eval $(aws ecr get-login --no-include-email --region ${region_id})
-docker build --build-arg COMMIT=${commit} --build-arg JOBS=${jobs} -t zilliqa:${commit} docker
-docker build -t ${registry_url} -<<EOF
-FROM zilliqa:${commit}
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    dnsutils \
-    gdb \
-    less \
-    logrotate \
-    net-tools \
-    rsyslog \
-    vim \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install setuptools \
-    && pip install kubernetes \
-    && pip uninstall urllib3 --yes \
-    && pip install urllib3==1.23
-EOF
-
-docker push ${registry_url}
+make -C docker k8s-${target} COMMIT=${commit}
+docker tag ${source_image} ${target_image}
+docker push ${target_image}

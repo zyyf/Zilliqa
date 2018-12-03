@@ -71,8 +71,11 @@ void gen_txn_file(const std::string& prefix, const KeyPairAddress& from,
   std::vector<uint32_t> txnOffsets;
 
   for (auto nonce = begin; nonce < end; nonce++) {
-    Transaction txn{0, nonce, toAddr, std::make_pair(privKey, pubKey), nonce, 1,
-                    1, {},    {}};
+    Transaction txn{0,      nonce,
+                    toAddr, std::make_pair(privKey, pubKey),
+                    nonce,  PRECISION_MIN_VALUE,
+                    1,      {},
+                    {}};
     txnOffsets.push_back(txnBuff.size());
     if (!Messenger::SetTransaction(txnBuff, txnBuff.size(), txn)) {
       std::cout << "Messenger::SetTransaction failed." << std::endl;
@@ -163,8 +166,8 @@ int main(int argc, char** argv) {
             << "\n";
 
   for (auto batch = begin; batch < end; batch++) {
-    auto begin_nonce = batch * batch_size;
-    auto end_nonce = (batch + 1) * batch_size;
+    auto begin_nonce = batch * batch_size + 1;
+    auto end_nonce = (batch + 1) * batch_size + 1;
     auto nonce_range = std::make_tuple(begin_nonce, end_nonce);
 
     for (auto& from : fromAccounts) {

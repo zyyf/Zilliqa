@@ -18,7 +18,10 @@
  */
 
 #include <array>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 #include <chrono>
 #include <functional>
 #include <thread>
@@ -35,6 +38,7 @@
 #include "libCrypto/Sha2.h"
 #include "libMediator/Mediator.h"
 #include "libMessage/Messenger.h"
+#include "libNetwork/Guard.h"
 #include "libUtils/BitVector.h"
 #include "libUtils/DataConversion.h"
 #include "libUtils/DetachedFunction.h"
@@ -218,8 +222,15 @@ bool Node::ProcessVCBlockCore(const VCBlock& vcblock) {
 }
 
 /// This function asssume ddsComm to indicate 0.0.0.0 for current node
+/// If you change this function remember to change
+/// UpdateRetrieveDSCommiteeCompositionAfterVC()
 void Node::UpdateDSCommiteeCompositionAfterVC(
     const VCBlock& vcblock, deque<pair<PubKey, Peer>>& dsComm) {
+  if (GUARD_MODE) {
+    LOG_GENERAL(INFO, "In guard mode. No updating of DS composition requried");
+    return;
+  }
+
   for (const auto& faultyLeader : vcblock.GetHeader().GetFaultyLeaders()) {
     deque<pair<PubKey, Peer>>::iterator it;
 
@@ -231,6 +242,30 @@ void Node::UpdateDSCommiteeCompositionAfterVC(
     } else {
       it = find(dsComm.begin(), dsComm.end(), faultyLeader);
     }
+
+    // Remove faulty leader from the current
+    if (it != dsComm.end()) {
+      dsComm.erase(it);
+    } else {
+      LOG_GENERAL(FATAL, "Cannot find the ds leader to eject");
+    }
+
+    dsComm.emplace_back(faultyLeader);
+  }
+}
+
+// Only compares the pubkeys to kickout
+void Node::UpdateRetrieveDSCommiteeCompositionAfterVC(
+    const VCBlock& vcblock, deque<pair<PubKey, Peer>>& dsComm) {
+  if (GUARD_MODE) {
+    LOG_GENERAL(INFO, "In guard mode. No updating of DS composition requried");
+    return;
+  }
+  for (const auto& faultyLeader : vcblock.GetHeader().GetFaultyLeaders()) {
+    auto it = find_if(dsComm.begin(), dsComm.end(),
+                      [faultyLeader](const pair<PubKey, Peer>& p) {
+                        return p.first == faultyLeader.first;
+                      });
 
     // Remove faulty leader from the current
     if (it != dsComm.end()) {

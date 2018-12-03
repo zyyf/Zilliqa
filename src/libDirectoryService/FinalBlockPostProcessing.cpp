@@ -65,7 +65,7 @@ void DirectoryService::StoreFinalBlockToDisk() {
                 << m_finalBlock->GetHeader().GetBlockNum() << " with Type: "
                 << to_string(m_finalBlock->GetHeader().GetType())
                 << ", Version: " << m_finalBlock->GetHeader().GetVersion()
-                << ", Timestamp: " << m_finalBlock->GetHeader().GetTimestamp()
+                << ", Timestamp: " << m_finalBlock->GetTimestamp()
                 << ", NumTxs: " << m_finalBlock->GetHeader().GetNumTxs());
 
   vector<unsigned char> serializedTxBlock;
@@ -124,8 +124,22 @@ void DirectoryService::SendFinalBlockToShardNodes(
   LOG_MARKER();
 
   if ((my_DS_cluster_num + 1) > m_shards.size()) {
+    LOG_STATE(
+        "[FLBLK]["
+        << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
+        << "]["
+        << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() +
+               1
+        << "] NOT SUPPOSED TO BE SENDING BLOCK");
     return;
   }
+
+  LOG_STATE(
+      "[FLBLK]["
+      << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
+      << "]["
+      << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() + 1
+      << "] BEFORE SENDING FINAL BLOCK");
 
   const uint64_t dsBlockNumber =
       m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetBlockNum();
@@ -206,6 +220,13 @@ void DirectoryService::SendFinalBlockToShardNodes(
 
     p++;
   }
+
+  LOG_STATE(
+      "[FLBLK]["
+      << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
+      << "]["
+      << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() + 1
+      << "] AFTER SENDING FINAL BLOCK");
 }
 
 // void DirectoryService::StoreMicroBlocksToDisk()
@@ -243,7 +264,7 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone() {
   // Clear microblock(s)
   // m_microBlocks.clear();
 
-  m_mediator.HeartBeatPulse();
+  // m_mediator.HeartBeatPulse();
 
   if (m_mode == PRIMARY_DS) {
     LOG_STATE(
@@ -268,7 +289,8 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone() {
     BlockStorage::GetBlockStorage().PutMetadata(MetaType::DSINCOMPLETED, {'0'});
   } else {
     // Coinbase
-    SaveCoinbase(m_finalBlock->GetB1(), m_finalBlock->GetB2(), -1,
+    SaveCoinbase(m_finalBlock->GetB1(), m_finalBlock->GetB2(),
+                 CoinbaseReward::FINALBLOCK_REWARD,
                  m_mediator.m_currentEpochNum);
     m_totalTxnFees += m_finalBlock->GetHeader().GetRewards();
   }
@@ -276,7 +298,8 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone() {
   m_mediator.UpdateDSBlockRand();
   m_mediator.UpdateTxBlockRand();
 
-  if (m_toSendTxnToLookup && !isVacuousEpoch) {
+  if (m_mediator.m_node->m_microblock != nullptr && !isVacuousEpoch) {
+    m_mediator.m_node->UpdateProcessedTransactions();
     m_mediator.m_node->CallActOnFinalblock();
   }
 
@@ -302,29 +325,15 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone() {
   unsigned int my_shards_lo;
   unsigned int my_shards_hi;
 
-  LOG_STATE(
-      "[FLBLK]["
-      << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
-      << "]["
-      << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() + 1
-      << "] BEFORE SENDING FINAL BLOCK");
-
   DetermineShardsToSendBlockTo(my_DS_cluster_num, my_shards_lo, my_shards_hi);
   SendFinalBlockToShardNodes(my_DS_cluster_num, my_shards_lo, my_shards_hi);
 
-  LOG_STATE(
-      "[FLBLK]["
-      << setw(15) << left << m_mediator.m_selfPeer.GetPrintableIPAddress()
-      << "]["
-      << m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() + 1
-      << "] AFTER SENDING FINAL BLOCK");
-
   {
     lock_guard<mutex> g(m_mediator.m_mutexCurSWInfo);
-    if (0 == (m_mediator.m_currentEpochNum % NUM_FINAL_BLOCK_PER_POW) &&
-        m_mediator.m_curSWInfo.GetUpgradeDS() ==
-            ((m_mediator.m_currentEpochNum / NUM_FINAL_BLOCK_PER_POW) +
-             INIT_DS_EPOCH_NUM)) {
+    if (isVacuousEpoch && m_mediator.m_curSWInfo.GetUpgradeDS() - 1 ==
+                              m_mediator.m_dsBlockChain.GetLastBlock()
+                                  .GetHeader()
+                                  .GetBlockNum()) {
       auto func = [this]() mutable -> void {
         UpgradeManager::GetInstance().ReplaceNode(m_mediator);
       };
@@ -333,6 +342,7 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone() {
   }
 
   AccountStore::GetInstance().InitTemp();
+  AccountStore::GetInstance().InitReversibles();
   m_stateDeltaFromShards.clear();
   m_allPoWConns.clear();
   ClearDSPoWSolns();
@@ -349,7 +359,7 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone() {
     } else {
       m_mediator.m_node->UpdateStateForNextConsensusRound();
       SetState(MICROBLOCK_SUBMISSION);
-      m_dsStartedMicroblockConsensus = false;
+      m_stopRecvNewMBSubmission = false;
       LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
                 "[No PoW needed] Waiting for Microblock.");
 
@@ -386,26 +396,9 @@ void DirectoryService::ProcessFinalBlockConsensusWhenDone() {
                          1
                   << "] TIMEOUT: Didn't receive all Microblock.");
 
-        auto func2 = [this]() mutable -> void {
-          if (!m_dsStartedMicroblockConsensus) {
-            m_dsStartedMicroblockConsensus = true;
-            m_mediator.m_node->RunConsensusOnMicroBlock();
-          }
-        };
+        m_stopRecvNewMBSubmission = true;
 
-        DetachedFunction(1, func2);
-
-        std::unique_lock<std::mutex> cv_lk(m_MutexScheduleFinalBlockConsensus);
-        if (cv_scheduleFinalBlockConsensus.wait_for(
-                cv_lk,
-                std::chrono::seconds(DS_MICROBLOCK_CONSENSUS_OBJECT_TIMEOUT)) ==
-            std::cv_status::timeout) {
-          LOG_GENERAL(WARNING,
-                      "Timeout: Didn't finish DS Microblock. Proceeds "
-                      "without it");
-
-          RunConsensusOnFinalBlock(DirectoryService::REVERT_STATEDELTA);
-        }
+        RunConsensusOnFinalBlock();
       }
     }
   };
@@ -461,11 +454,11 @@ bool DirectoryService::ProcessFinalBlockConsensus(
     if (consensus_id == m_mediator.m_consensusID) {
       lock_guard<mutex> g(m_mutexPrepareRunFinalblockConsensus);
       cv_scheduleDSMicroBlockConsensus.notify_all();
-      if (!m_dsStartedMicroblockConsensus) {
-        m_dsStartedMicroblockConsensus = true;
+      if (!m_stopRecvNewMBSubmission) {
+        m_stopRecvNewMBSubmission = true;
       }
       cv_scheduleFinalBlockConsensus.notify_all();
-      RunConsensusOnFinalBlock(DirectoryService::REVERT_STATEDELTA);
+      RunConsensusOnFinalBlock();
     }
   } else {
     if (consensus_id < m_mediator.m_consensusID) {
@@ -527,7 +520,7 @@ bool DirectoryService::ProcessFinalBlockConsensusCore(
           cv_lk, std::chrono::seconds(CONSENSUS_MSG_ORDER_BLOCK_WINDOW),
           [this, message, offset]() -> bool {
             lock_guard<mutex> g(m_mutexConsensus);
-            if (m_mediator.m_lookup->m_syncType != SyncType::NO_SYNC) {
+            if (m_mediator.m_lookup->GetSyncType() != SyncType::NO_SYNC) {
               LOG_GENERAL(WARNING,
                           "The node started the process of rejoining, "
                           "Ignore rest of "
@@ -566,19 +559,17 @@ bool DirectoryService::ProcessFinalBlockConsensusCore(
     ProcessFinalBlockConsensusWhenDone();
   } else if (state == ConsensusCommon::State::ERROR) {
     LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
-              "Oops,     - what to do now???");
+              "Oops, no consensus reached - consensus error. "
+              "error number: "
+                  << to_string(m_consensusObject->GetConsensusErrorCode())
+                  << " error message: "
+                  << (m_consensusObject->GetConsensusErrorMsg()));
 
     if (m_consensusObject->GetConsensusErrorCode() ==
         ConsensusCommon::FINALBLOCK_MISSING_MICROBLOCKS) {
       // Missing microblocks proposed by leader. Will attempt to fetch
       // missing microblocks from leader, set to a valid state to accept cosig1
       // and cosig2
-      LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
-                "Oops, no consensus reached - consensus error. "
-                "error number: "
-                    << to_string(m_consensusObject->GetConsensusErrorCode())
-                    << " error message: "
-                    << (m_consensusObject->GetConsensusErrorMsg()));
 
       // Block till txn is fetched
       unique_lock<mutex> lock(m_mutexCVMissingMicroBlock);
@@ -593,12 +584,35 @@ bool DirectoryService::ProcessFinalBlockConsensusCore(
             ConsensusCommon::INITIAL);
 
         auto rerunconsensus = [this, message, offset, from]() {
-          AccountStore::GetInstance().RevertCommitTemp();
-          AccountStore::GetInstance().CommitTempReversible();
-
+          PrepareRunConsensusOnFinalBlockNormal();
           ProcessFinalBlockConsensusCore(message, offset, from);
         };
         DetachedFunction(1, rerunconsensus);
+        return true;
+      }
+    } else if (m_consensusObject->GetConsensusErrorCode() ==
+               ConsensusCommon::MISSING_TXN) {
+      // Missing txns in microblock proposed by leader. Will attempt to fetch
+      // missing txns from leader, set to a valid state to accept cosig1 and
+      // cosig2
+      LOG_GENERAL(INFO, "Start pending for fetching missing txns")
+
+      // Block till txn is fetched
+      unique_lock<mutex> lock(m_mediator.m_node->m_mutexCVMicroBlockMissingTxn);
+      if (m_mediator.m_node->cv_MicroBlockMissingTxn.wait_for(
+              lock, chrono::seconds(FETCHING_MISSING_DATA_TIMEOUT)) ==
+          std::cv_status::timeout) {
+        LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
+                  "fetching missing txn timeout");
+      } else {
+        // Re-run consensus
+        m_consensusObject->RecoveryAndProcessFromANewState(
+            ConsensusCommon::INITIAL);
+
+        auto reprocessconsensus = [this, message, offset, from]() {
+          ProcessFinalBlockConsensusCore(message, offset, from);
+        };
+        DetachedFunction(1, reprocessconsensus);
         return true;
       }
     }

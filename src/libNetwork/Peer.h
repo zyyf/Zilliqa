@@ -20,7 +20,10 @@
 #ifndef __PEER_H__
 #define __PEER_H__
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <boost/multiprecision/cpp_int.hpp>
+#pragma GCC diagnostic pop
 #include <cstdint>
 #include <functional>
 
@@ -68,6 +71,10 @@ struct Peer : public Serializable {
 
   /// Implements the Deserialize function inherited from Serializable.
   int Deserialize(const std::vector<unsigned char>& src, unsigned int offset);
+
+  /// Getters.
+  const boost::multiprecision::uint128_t& GetIpAddress() const;
+  const uint32_t& GetListenPortHost() const;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Peer& p) {
