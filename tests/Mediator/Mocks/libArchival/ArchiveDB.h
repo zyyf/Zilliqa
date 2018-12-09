@@ -1,0 +1,15 @@
+/*
+ * ArchiveDB.h
+ *
+ *  Created on: Dec 7, 2018
+ *      Author: jenda
+ */
+
+#ifndef TESTS_MEDIATOR_MOCKS_LIBARCHIVAL_ARCHIVEDB_H_
+#define TESTS_MEDIATOR_MOCKS_LIBARCHIVAL_ARCHIVEDB_H_
+
+
+
+
+
+#endif /* TESTS_MEDIATOR_MOCKS_LIBARCHIVAL_ARCHIVEDB_H_ */

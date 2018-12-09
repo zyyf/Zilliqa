@@ -10,42 +10,49 @@
 
 #include "gmock/gmock.h"
 
+#include "libData/BlockData/BlockHeader/DSBlockHeader.h"
+
+
+class TxBlockHeader {
+  public:
+  void Serialize(std::vector<unsigned char> vec, unsigned int offset) {
+    (void)vec;
+    (void)offset;
+  }
+};
+
 class DSBlock {
-  DSBlock() {};
-  ~DSBlock() {};
+public:
+  DSBlockHeader GetHeader() {
+    return DSBlockHeader();
+  }
+
 };
 
 class TxBlock {
-  TxBlock() {};
-  ~TxBlock() {};
+public:
+  TxBlockHeader GetHeader() {
+    return TxBlockHeader();
+  }
 };
 
 template <class T>
 class BlockChain {
+public:
 
- protected:
-
- public:
-  /// Destructor.
-  BlockChain() {};
-  ~BlockChain() {};
 };
 
 class DSBlockChain : public BlockChain<DSBlock> {
  public:
-  DSBlock GetBlockFromPersistentStorage(const uint64_t& blockNum) {
-    std::shared_ptr<DSBlock> block;
-    BlockStorage::GetBlockStorage().GetDSBlock(blockNum, block);
-    return *block;
+  DSBlock GetLastBlock(){
+    return DSBlock();
   }
 };
 
 class TxBlockChain : public BlockChain<TxBlock> {
- public:
-  TxBlock GetBlockFromPersistentStorage(const uint64_t& blockNum) {
-    TxBlockSharedPtr block;
-    BlockStorage::GetBlockStorage().GetTxBlock(blockNum, block);
-    return *block;
+public:
+  TxBlock GetLastBlock() {
+    return TxBlock();
   }
 };
 

@@ -19,17 +19,17 @@
 
 #include <limits>
 #include <random>
+#include <utility>
 #include "libArchival/Archival.h"
 #include "libArchival/ArchiveDB.h"
-#include "libMediator/Mediator.h"
-#include "libMessage/Messenger.h"
-#include "libUtils/Logger.h"
-//#include "libTestUtils/TestUtils.h"
+#include "Mediator.h"
+#include "libCrypto/Schnorr.h"
 
 #include "gtest/gtest.h"
 //#define BOOST_TEST_MODULE message
 //#define BOOST_TEST_DYN_LINK
 //#include <boost/test/unit_test.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
 
 using namespace std;
 using namespace boost::multiprecision;
@@ -40,14 +40,14 @@ Mediator* m;
 
 TEST(Mediator, init) {
   INIT_STDOUT_LOGGER();
-  //rng.seed(std::random_device()());
 
-  PrivKey privk;
-  KeyPair kp = KeyPair(privk, PubKey(privk));
+  PrivKey privk();
+  PubKey pubk();
 
-  //KeyPair kp = TestUtils::GenerateRandomKeyPair();
+  std::pair<PrivKey, PubKey> ppk_p;
+  ppk_p = std::make_pair(privk, pubk);
   Peer p = Peer();
-  m = new Mediator(kp, p);
+  m = new Mediator(ppk_p, p);
 }
 //
 //BOOST_AUTO_TEST_CASE(RegisterColleagues) {
