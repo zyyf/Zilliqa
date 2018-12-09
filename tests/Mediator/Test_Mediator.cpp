@@ -41,8 +41,8 @@ Mediator* m;
 TEST(Mediator, init) {
   INIT_STDOUT_LOGGER();
 
-  PrivKey privk();
-  PubKey pubk();
+  PrivKey privk = PrivKey();
+  PubKey pubk = PubKey();
 
   std::pair<PrivKey, PubKey> ppk_p;
   ppk_p = std::make_pair(privk, pubk);
