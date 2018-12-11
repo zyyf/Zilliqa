@@ -1,4 +1,4 @@
 add_executable(Test_Mediator Test_Mediator.cpp ${CMAKE_SOURCE_DIR}/src/libMediator/Mediator.cpp ${CMAKE_SOURCE_DIR}/src/libUtils/Logger.cpp ${CMAKE_SOURCE_DIR}/src/libUtils/TimeUtils.cpp)
 target_include_directories (Test_Mediator PUBLIC ${G3LOG_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/tests/Mediator/Mocks ${CMAKE_SOURCE_DIR}/src/libMediator ${CMAKE_SOURCE_DIR}/googletest-src/googletest/include ${CMAKE_SOURCE_DIR}/googletest-src/googlemock/include ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(Test_Mediator PUBLIC gmock_main)
+target_link_libraries(Test_Mediator PUBLIC g3logger gmock_main)
 add_test(NAME Test_Mediator COMMAND Test_Mediator)
