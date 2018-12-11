@@ -621,8 +621,7 @@ bool DirectoryService::ProcessMissingMicroblockSubmission(
   }
 
   // TODO: Check if every microblock is obtained
-  std::vector<unsigned char> errorMsg;
-  if (!CheckMicroBlocks(errorMsg)) {
+  if (!CheckMicroBlocks(false)) {
     LOG_GENERAL(WARNING,
                 "Still have missing microblocks after fetching, what to do???");
     return false;
