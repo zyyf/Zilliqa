@@ -24,6 +24,7 @@
 #include "libArchival/ArchiveDB.h"
 #include "Mediator.h"
 #include "libCrypto/Schnorr.h"
+#include "libTestUtils/TestUtils.h"
 
 #include "gtest/gtest.h"
 //#define BOOST_TEST_MODULE message
@@ -49,89 +50,97 @@ TEST(Mediator, init) {
   Peer p = Peer();
   m = new Mediator(ppk_p, p);
 }
-//
-//BOOST_AUTO_TEST_CASE(RegisterColleagues) {
-//  DirectoryService ds(*m);
-//  Node node(*m, 0, false);
-//  Lookup lookup(*m);
-//  Validator validator(*m);
-//  ArchiveDB archDB("name", "txn", "txBlock", "dsBlock", "accountState");
-//  Archival arch(*m);
+
+//TEST(Mediator, RegisterColleagues) {
+//  DirectoryService ds = DirectoryService();
+//  Node node = Node();
+//  Lookup lookup = Lookup();
+//  ValidatorBase validator = ValidatorBase();
+//  BaseDB archDB = BaseDB();
+//  Archival arch = Archival();
 //
 //  m->RegisterColleagues(&ds, &node, &lookup, &validator, &archDB, &arch);
 //}
 //
-//BOOST_AUTO_TEST_CASE(UpdateDSBlockRand) {
+//TEST(Mediator, UpdateDSBlockRand) {
 //  m->UpdateDSBlockRand(false);
 //  m->UpdateDSBlockRand(true);
 //}
 //
-//BOOST_AUTO_TEST_CASE(UpdateTxBlockRand) {
+//TEST(Mediator, UpdateTxBlockRand) {
 //  m->UpdateTxBlockRand(false);
 //  m->UpdateTxBlockRand(true);
 //}
 //
-//BOOST_AUTO_TEST_CASE(HeartBeat) { m->HeartBeatLaunch(); }
+//TEST(Mediator, HeartBeat) { m->HeartBeatLaunch(); }
 //
-//BOOST_AUTO_TEST_CASE(VacuousEpoch) {
-//  uint64_t VACUOUS_EPOCH = NUM_FINAL_BLOCK_PER_POW - 1;
+//TEST(Mediator, VacuousEpoch) {
 //  uint64_t ve = (NUM_FINAL_BLOCK_PER_POW *
 //                 TestUtils::RandomIntInRng<uint64_t>(1, 200000)) -
 //                1;
-//  BOOST_CHECK_MESSAGE(m->GetIsVacuousEpoch(ve),
-//                      "Incorrect Vacuous epoch. POW period:" +
-//                          std::to_string(NUM_FINAL_BLOCK_PER_POW) +
-//                          ". Current block: " + std::to_string(ve));
+//  EXPECT_TRUE(m->GetIsVacuousEpoch(ve));
+////  BOOST_CHECK_MESSAGE(m->GetIsVacuousEpoch(ve),
+////                      "Incorrect Vacuous epoch. POW period:" +
+////                          std::to_string(NUM_FINAL_BLOCK_PER_POW) +
+////                          ". Current block: " + std::to_string(ve));
+//
+//  uint64_t VACUOUS_EPOCH = NUM_FINAL_BLOCK_PER_POW - 1;
 //
 //  uint64_t i = 1;
 //  for (; i < VACUOUS_EPOCH; i++) {
 //    m->IncreaseEpochNum();
-//    BOOST_CHECK_MESSAGE(!m->GetIsVacuousEpoch(),
-//                        "Incorrect Vacuous epoch. Final block number per POW " +
-//                            std::to_string(NUM_FINAL_BLOCK_PER_POW) +
-//                            ". Current block: " + std::to_string(i));
+//    EXPECT_FALSE(m->GetIsVacuousEpoch(ve));
+////    BOOST_CHECK_MESSAGE(!m->GetIsVacuousEpoch(),
+////                        "Incorrect Vacuous epoch. Final block number per POW " +
+////                            std::to_string(NUM_FINAL_BLOCK_PER_POW) +
+////                            ". Current block: " + std::to_string(i));
 //  }
+//
 //  m->IncreaseEpochNum();
-//  BOOST_CHECK_MESSAGE(m->GetIsVacuousEpoch(),
-//                      "Missed Vacuous epoch. Final block number per POW " +
-//                          std::to_string(NUM_FINAL_BLOCK_PER_POW) +
-//                          ". Current block: " + std::to_string(i));
+//
+//  EXPECT_TRUE(m->GetIsVacuousEpoch());
+////  BOOST_CHECK_MESSAGE(m->GetIsVacuousEpoch(),
+////                      "Missed Vacuous epoch. Final block number per POW " +
+////                          std::to_string(NUM_FINAL_BLOCK_PER_POW) +
+////                          ". Current block: " + std::to_string(i));
 //}
 //
-//BOOST_AUTO_TEST_CASE(GetNodeMode) {
+//TEST(Mediator, GetNodeMode) {
 //  uint32_t size = TestUtils::RandomIntInRng<uint32_t>(2, 100);
 //  for (uint32_t i = 1; i <= size; i++) {
 //    m->m_DSCommittee->push_front(
-//        std::make_pair(TestUtils::GenerateRandomPubKey(),
-//                       TestUtils::GenerateRandomPeer(0, true)));
+//        std::make_pair(PubKey(), Peer()));
 //  }
 //
-//  Peer p_unknown = TestUtils::GenerateRandomPeer(0, false);
+//  Peer p_unknown = Peer();
 //
 //  string EXPECTED_MODE = "SHRD";
 //  string mode = m->GetNodeMode(p_unknown);
-//  BOOST_CHECK_MESSAGE(
-//      mode == EXPECTED_MODE,
-//      "Wrong mode. Expected " + EXPECTED_MODE + ". Result: " + mode);
+//  EXPECT_EQ(EXPECTED_MODE, mode);
+////  BOOST_CHECK_MESSAGE(
+////      mode == EXPECTED_MODE,
+////      "Wrong mode. Expected " + EXPECTED_MODE + ". Result: " + mode);
 //
 //  EXPECTED_MODE = "DSBU";
 //  size_t dsc_size = m->m_DSCommittee->size();
 //  size_t pair_i = TestUtils::RandomIntInRng<size_t>(1, dsc_size - 1);
 //  (*m->m_DSCommittee)[pair_i].second = p_unknown;
 //  mode = m->GetNodeMode(p_unknown);
-//  BOOST_CHECK_MESSAGE(
-//      mode == EXPECTED_MODE,
-//      "Wrong mode. Expected " + EXPECTED_MODE + ". Result: " + mode);
+//  EXPECT_EQ(EXPECTED_MODE, mode);
+////  BOOST_CHECK_MESSAGE(
+////      mode == EXPECTED_MODE,
+////      "Wrong mode. Expected " + EXPECTED_MODE + ". Result: " + mode);
 //
 //  EXPECTED_MODE = "DSLD";
 //  (*m->m_DSCommittee)[0].second = p_unknown;
 //  mode = m->GetNodeMode(p_unknown);
-//  BOOST_CHECK_MESSAGE(
-//      mode == EXPECTED_MODE,
-//      "Wrong mode. Expected " + EXPECTED_MODE + ". Result: " + mode);
+//  EXPECT_EQ(EXPECTED_MODE, mode);
+////  BOOST_CHECK_MESSAGE(
+////      mode == EXPECTED_MODE,
+////      "Wrong mode. Expected " + EXPECTED_MODE + ". Result: " + mode);
 //}
-//
-//BOOST_AUTO_TEST_CASE(GetShardSize) {
+
+//TEST(Mediator, GetShardSize) {
 //  DirectoryService ds(*m);
 //  ds.m_shards = TestUtils::GenerateDequeueOfShard(10);
 //  m->m_ds = &ds;
@@ -139,10 +148,11 @@ TEST(Mediator, init) {
 //  uint32_t EXPECTED_SHARDSIZE = 651;
 //  uint32_t shardsize = m->GetShardSize(true);
 //
-//  BOOST_CHECK_MESSAGE(
-//      std::to_string(shardsize) == std::to_string(EXPECTED_SHARDSIZE),
-//      "Wrong mode. Expected " + std::to_string(EXPECTED_SHARDSIZE) +
-//          ". Result: " + std::to_string(shardsize));
+//  EXPECT_EQ(std::to_string(EXPECTED_SHARDSIZE), std::to_string(shardsize))
+////  BOOST_CHECK_MESSAGE(
+////      std::to_string(shardsize) == std::to_string(EXPECTED_SHARDSIZE),
+////      "Wrong mode. Expected " + std::to_string(EXPECTED_SHARDSIZE) +
+////          ". Result: " + std::to_string(shardsize));
 //}
 //
 //BOOST_AUTO_TEST_CASE(CleanUp) { delete m; }

@@ -9,7 +9,12 @@
 #define TESTS_MEDIATOR_MOCKS_LIBARCHIVAL_BASEDB_H_
 
 class BaseDB {
-
+public:
+  BaseDB(){
+  }
+  BaseDB(const BaseDB &bdb){
+    (void)bdb;
+  }
 };
 
 

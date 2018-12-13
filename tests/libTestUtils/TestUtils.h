@@ -26,12 +26,12 @@
 #include <limits>
 #include <random>
 #include <tuple>
-#include "libCrypto/Schnorr.h"
-#include "libData/BlockData/BlockHeader/DSBlockHeader.h"
-#include "libData/BlockData/BlockHeader/MicroBlockHeader.h"
-#include "libData/BlockData/BlockHeader/TxBlockHeader.h"
-#include "libMessage/Messenger.h"
-#include "libNetwork/Peer.h"
+//#include "libCrypto/Schnorr.h"
+//#include "libData/BlockData/BlockHeader/DSBlockHeader.h"
+//#include "libData/BlockData/BlockHeader/MicroBlockHeader.h"
+//#include "libData/BlockData/BlockHeader/TxBlockHeader.h"
+//#include "libMessage/Messenger.h"
+//#include "libNetwork/Peer.h"
 
 static std::mt19937 rng;
 
@@ -53,24 +53,24 @@ uint64_t DistUint64();
 boost::multiprecision::uint128_t DistUint128();
 boost::multiprecision::uint256_t DistUint256();
 
-PubKey GenerateRandomPubKey();
-PubKey GenerateRandomPubKey(PrivKey);
-KeyPair GenerateRandomKeyPair();
-Peer GenerateRandomPeer();
-Peer GenerateRandomPeer(uint8_t, bool);
-DSBlockHeader GenerateRandomDSBlockHeader();
-MicroBlockHeader GenerateRandomMicroBlockHeader();
-TxBlockHeader GenerateRandomTxBlockHeader();
-VCBlockHeader GenerateRandomVCBlockHeader();
-FallbackBlockHeader GenerateRandomFallbackBlockHeader();
-CoSignatures GenerateRandomCoSignatures();
-
-using DS_Comitte_t = std::deque<std::pair<PubKey, Peer>>;
-DS_Comitte_t GenerateRandomDSCommittee(uint32_t);
-
-Shard GenerateRandomShard(size_t);
-DequeOfShard GenerateDequeueOfShard(size_t);
-std::string GenerateRandomString(size_t);
+//PubKey GenerateRandomPubKey();
+//PubKey GenerateRandomPubKey(PrivKey);
+//KeyPair GenerateRandomKeyPair();
+//Peer GenerateRandomPeer();
+//Peer GenerateRandomPeer(uint8_t, bool);
+//DSBlockHeader GenerateRandomDSBlockHeader();
+//MicroBlockHeader GenerateRandomMicroBlockHeader();
+//TxBlockHeader GenerateRandomTxBlockHeader();
+//VCBlockHeader GenerateRandomVCBlockHeader();
+//FallbackBlockHeader GenerateRandomFallbackBlockHeader();
+//CoSignatures GenerateRandomCoSignatures();
+//
+//using DS_Comitte_t = std::deque<std::pair<PubKey, Peer>>;
+//DS_Comitte_t GenerateRandomDSCommittee(uint32_t);
+//
+//Shard GenerateRandomShard(size_t);
+//DequeOfShard GenerateDequeueOfShard(size_t);
+//std::string GenerateRandomString(size_t);
 }  // namespace TestUtils
 
 #endif  // __TESTUTILS_H__

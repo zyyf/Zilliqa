@@ -39,14 +39,16 @@ public:
 template <class T>
 class BlockChain {
 public:
-
+  T GetLastBlock() {
+    return T();
+  }
 };
 
 class DSBlockChain : public BlockChain<DSBlock> {
  public:
-  DSBlock GetLastBlock(){
-    return DSBlock();
-  }
+//  DSBlock GetLastBlock(){
+//    return DSBlock();
+//  }
 };
 
 class TxBlockChain : public BlockChain<TxBlock> {

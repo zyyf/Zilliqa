@@ -4,7 +4,7 @@
 #add_subdirectory (Data)
 #add_subdirectory (depends)
 ##add_subdirectory (Incentives)
-#add_subdirectory (libTestUtils)
+add_subdirectory (libTestUtils)
 #add_subdirectory (Lookup)
 add_subdirectory (Mediator)
 #add_subdirectory (Message)

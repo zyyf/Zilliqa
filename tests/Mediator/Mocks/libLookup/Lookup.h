@@ -17,6 +17,11 @@ using VectorOfLookupNode = std::vector<std::pair<PubKey, Peer>>;
 
 class Lookup {
 public:
+  Lookup(){
+  }
+  Lookup(const Lookup &l){
+    (void)l;
+  }
   std::mutex m_mutexDSInfoUpdation;
   std::condition_variable cv_dsInfoUpdate;
 };

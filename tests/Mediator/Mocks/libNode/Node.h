@@ -10,6 +10,10 @@
 
 class Node {
 public:
+  Node(){};
+  Node(const Node &n){
+    (void)n;
+  }
   void RejoinAsNormal(){
   }
 };

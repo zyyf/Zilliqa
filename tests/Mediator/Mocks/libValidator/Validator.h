@@ -9,6 +9,12 @@
 #define TESTS_MEDIATOR_MOCKS_LIBVALIDATOR_VALIDATOR_H_
 
 class ValidatorBase {
+public:
+  ValidatorBase(){
+  }
+  ValidatorBase(const ValidatorBase &v){
+    (void)v;
+  }
 
 };
 

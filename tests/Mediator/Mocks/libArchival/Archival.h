@@ -11,7 +11,12 @@
 #include "libUtils/Logger.h"
 
 class Archival {
-
+public:
+  Archival(){
+  }
+  Archival(const Archival &a){
+    (void)a;
+  }
 };
 
 

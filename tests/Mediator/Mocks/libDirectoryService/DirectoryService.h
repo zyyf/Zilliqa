@@ -20,6 +20,9 @@ using DequeOfShard = std::deque<Shard>;
 
 class DirectoryService {
 public:
+  DirectoryService(){};
+  DirectoryService(const DirectoryService &ds)
+  {(void)ds;}
   enum Mode : unsigned char { IDLE = 0x00, PRIMARY_DS, BACKUP_DS };
   std::atomic<Mode> m_mode;
   void RejoinAsDS(){
