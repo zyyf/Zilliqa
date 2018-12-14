@@ -12,14 +12,12 @@
 
 class Node {
 public:
-//  Node();
   Node(){}
   Node(const Node& n){
     (void)n;
   }
 
   virtual ~Node() {}
-  //virtual Node(const Node) = 0;
   virtual void RejoinAsNormal(){}
 };
 
@@ -29,7 +27,7 @@ public:
   MockNode(const MockNode& mn) : Node(mn) {
     (void)mn;
   }
-//  void RejoinAsNormal();
+
   MOCK_METHOD0(RejoinAsNormal, void());
 };
 

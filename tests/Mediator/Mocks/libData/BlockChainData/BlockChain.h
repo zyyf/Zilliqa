@@ -46,9 +46,6 @@ public:
 
 class DSBlockChain : public BlockChain<DSBlock> {
  public:
-//  DSBlock GetLastBlock(){
-//    return DSBlock();
-//  }
 };
 
 class TxBlockChain : public BlockChain<TxBlock> {
