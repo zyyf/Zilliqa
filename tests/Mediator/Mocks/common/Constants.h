@@ -23,7 +23,7 @@ const unsigned int NEW_NODE_SYNC_INTERVAL = 1;
 const unsigned int POW_WINDOW_IN_SECONDS = 0;
 const unsigned int POWPACKETSUBMISSION_WINDOW_IN_SECONDS = 0;
 const unsigned int FINALBLOCK_DELAY_IN_MS = 0;
-const unsigned int HEARTBEAT_INTERVAL_IN_SECONDS = 0;
-const unsigned int TX_DISTRIBUTE_TIME_IN_MS = 0;
+const unsigned int HEARTBEAT_INTERVAL_IN_SECONDS = 1;
+const unsigned int TX_DISTRIBUTE_TIME_IN_MS = 1000;
 
 #endif /* TESTS_MEDIATOR_MOCKS_COMMON_CONSTANTS_H_ */

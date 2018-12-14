@@ -20,48 +20,61 @@
 #include <limits>
 #include <random>
 #include <utility>
+#include <memory>
 #include "libArchival/Archival.h"
 #include "libArchival/ArchiveDB.h"
 #include "Mediator.h"
 #include "libCrypto/Schnorr.h"
 #include "libTestUtils/TestUtils.h"
+#include "libNode/Node.h"
 
 #include "gtest/gtest.h"
-//#define BOOST_TEST_MODULE message
-//#define BOOST_TEST_DYN_LINK
-//#include <boost/test/unit_test.hpp>
+#include "gmock/gmock.h"
+
 #include <boost/multiprecision/cpp_int.hpp>
 
 using namespace std;
 using namespace boost::multiprecision;
+using ::testing::AtLeast;
 
 // BOOST_AUTO_TEST_SUITE(mediator_test)
 
 Mediator* m;
 
-TEST(Mediator, init) {
-  INIT_STDOUT_LOGGER();
+//TEST(Mediator, init) {
+//  INIT_STDOUT_LOGGER();
+//
+//  PrivKey privk = PrivKey();
+//  PubKey pubk = PubKey();
+//
+//  std::pair<PrivKey, PubKey> ppk_p;
+//  ppk_p = std::make_pair(privk, pubk);
+//  Peer p = Peer();
+//  m = new Mediator(ppk_p, p);
+//}
 
-  PrivKey privk = PrivKey();
-  PubKey pubk = PubKey();
-
-  std::pair<PrivKey, PubKey> ppk_p;
-  ppk_p = std::make_pair(privk, pubk);
+TEST(Mediator, RegisterColleagues_HeartBeatLaunch) {
+  std::pair<PrivKey, PubKey> ppk_p = std::make_pair(PrivKey(), PubKey());
   Peer p = Peer();
   m = new Mediator(ppk_p, p);
+
+  std::deque<std::pair<PubKey, Peer>> ds_c;
+  ds_c.push_front(std::make_pair(PubKey(), Peer()));
+  m->m_DSCommittee = std::make_shared<std::deque<pair<PubKey, Peer>>>(ds_c);
+
+  DirectoryService ds(*m);
+  ds.m_mode = DirectoryService::Mode::BACKUP_DS;
+  MockNode mn = MockNode();
+  Lookup lookup = Lookup();
+  ValidatorBase validator = ValidatorBase();
+  BaseDB archDB = BaseDB();
+  Archival arch = Archival();
+
+  EXPECT_CALL(mn, RejoinAsNormal()).Times(AtLeast(1));
+  m->RegisterColleagues(&ds, &mn, &lookup, &validator, &archDB, &arch);
+  m->HeartBeatLaunch();
 }
 
-//TEST(Mediator, RegisterColleagues) {
-//  DirectoryService ds = DirectoryService();
-//  Node node = Node();
-//  Lookup lookup = Lookup();
-//  ValidatorBase validator = ValidatorBase();
-//  BaseDB archDB = BaseDB();
-//  Archival arch = Archival();
-//
-//  m->RegisterColleagues(&ds, &node, &lookup, &validator, &archDB, &arch);
-//}
-//
 //TEST(Mediator, UpdateDSBlockRand) {
 //  m->UpdateDSBlockRand(false);
 //  m->UpdateDSBlockRand(true);
@@ -142,19 +155,16 @@ TEST(Mediator, init) {
 
 //TEST(Mediator, GetShardSize) {
 //  DirectoryService ds(*m);
-//  ds.m_shards = TestUtils::GenerateDequeueOfShard(10);
+//  // ds.m_shards = TestUtils::GenerateDequeueOfShard(10);
 //  m->m_ds = &ds;
 //
 //  uint32_t EXPECTED_SHARDSIZE = 651;
 //  uint32_t shardsize = m->GetShardSize(true);
 //
-//  EXPECT_EQ(std::to_string(EXPECTED_SHARDSIZE), std::to_string(shardsize))
+//  EXPECT_EQ(std::to_string(EXPECTED_SHARDSIZE), std::to_string(shardsize));
 ////  BOOST_CHECK_MESSAGE(
 ////      std::to_string(shardsize) == std::to_string(EXPECTED_SHARDSIZE),
 ////      "Wrong mode. Expected " + std::to_string(EXPECTED_SHARDSIZE) +
 ////          ". Result: " + std::to_string(shardsize));
 //}
-//
-//BOOST_AUTO_TEST_CASE(CleanUp) { delete m; }
-//
-//BOOST_AUTO_TEST_SUITE_END()
+

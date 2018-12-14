@@ -14,7 +14,7 @@ class DetachedFunction {
   template <class callable, class... arguments>
   DetachedFunction(int num_threads, callable&& f, arguments&&... args) {
     (void)num_threads;
-    (void)f;
+    f();
   }
 };
 

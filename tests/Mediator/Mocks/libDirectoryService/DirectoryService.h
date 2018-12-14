@@ -18,20 +18,20 @@
 using Shard = std::vector<std::tuple<PubKey, Peer, uint16_t>>;
 using DequeOfShard = std::deque<Shard>;
 
+class Mediator;
+
 class DirectoryService {
 public:
-  DirectoryService(){};
-  DirectoryService(const DirectoryService &ds)
-  {(void)ds;}
   enum Mode : unsigned char { IDLE = 0x00, PRIMARY_DS, BACKUP_DS };
   std::atomic<Mode> m_mode;
-  void RejoinAsDS(){
-  }
   Synchronizer m_synchronizer;
   DequeOfShard m_shards;
-  int64_t GetAllPoWSize() const{
-    return 0;
-  }
+  Mediator& m;
+
+  DirectoryService(Mediator&);
+
+  int64_t GetAllPoWSize() const;
+  void RejoinAsDS();
 };
 
 
