@@ -985,7 +985,8 @@ bool Lookup::ProcessGetStateFromSeed(const vector<unsigned char>& message,
               "Messenger::GetLookupGetStateFromSeed failed.");
     return false;
   }
-
+  AccountStore::GetInstance().PrintAccountState();
+  
   Peer requestingNode(from.m_ipAddress, portNo);
   vector<unsigned char> setStateMessage = {
       MessageType::LOOKUP, LookupInstructionType::SETSTATEFROMSEED};
@@ -1913,6 +1914,8 @@ bool Lookup::ProcessSetStateFromSeed(const vector<unsigned char>& message,
     LOG_GENERAL(WARNING, "Deserialize AccountStore Failed");
     return false;
   }
+
+  AccountStore::GetInstance().PrintAccountState();
 
   if (ARCHIVAL_NODE) {
     LOG_GENERAL(INFO, "Succesfull state change");
