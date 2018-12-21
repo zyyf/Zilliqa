@@ -467,9 +467,6 @@ bool Node::ProcessVCDSBlocksMessage(const vector<unsigned char>& message,
     }
 
     m_mediator.m_lookup->SetSyncType(SyncType::NO_SYNC);
-    if (m_fromNewProcess) {
-      m_fromNewProcess = false;
-    }
   }
 
   m_mediator.m_ds->m_shards = move(t_shards);

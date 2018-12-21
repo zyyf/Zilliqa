@@ -238,7 +238,6 @@ Zilliqa::Zilliqa(const std::pair<PrivKey, PubKey>& key, const Peer& peer,
         LOG_GENERAL(INFO, "Sync as a new node");
         if (!toRetrieveHistory) {
           m_mediator.m_lookup->SetSyncType(SyncType::NEW_SYNC);
-          m_n.m_runFromLate = true;
           m_n.StartSynchronization();
         } else {
           LOG_GENERAL(WARNING,
@@ -258,7 +257,6 @@ Zilliqa::Zilliqa(const std::pair<PrivKey, PubKey>& key, const Peer& peer,
       case SyncType::NORMAL_SYNC:
         LOG_GENERAL(INFO, "Sync as a normal node");
         m_mediator.m_lookup->SetSyncType(SyncType::NORMAL_SYNC);
-        m_n.m_runFromLate = true;
         m_n.StartSynchronization();
         break;
       case SyncType::DS_SYNC:

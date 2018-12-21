@@ -320,9 +320,6 @@ class Node : public Executable, public Broadcastable {
   bool ComposeFallbackBlockMessageForSender(
       std::vector<unsigned char>& fallbackblock_message) const;
 
-  // Is Running from New Process
-  bool m_fromNewProcess = true;
-
   bool m_doRejoinAtNextRound = false;
   bool m_doRejoinAtStateRoot = false;
   bool m_doRejoinAtFinalBlock = false;
@@ -370,9 +367,6 @@ class Node : public Executable, public Broadcastable {
   // Proposed gas price
   boost::multiprecision::uint128_t m_proposedGasPrice;
   std::mutex m_mutexGasPrice;
-
-  // This process is newly invoked by shell from late node join script
-  bool m_runFromLate = false;
 
   // std::condition_variable m_cvAllMicroBlocksRecvd;
   // std::mutex m_mutexAllMicroBlocksRecvd;
