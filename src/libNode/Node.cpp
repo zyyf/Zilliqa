@@ -1349,6 +1349,7 @@ void Node::CommitTxnPacketBuffer() {
     ProcessTxnPacketFromLookupCore(message, epochNumber, dsBlockNum, shardId,
                                    lookupPubKey, transactions);
   }
+  m_txnPacketBuffer.clear();
 }
 
 // Used by Zilliqa in pow branch. This will be useful for us when doing the
@@ -1674,23 +1675,9 @@ bool Node::ProcessDSGuardNetworkInfoUpdate(const vector<unsigned char>& message,
 bool Node::ToBlockMessage([[gnu::unused]] unsigned char ins_byte) {
   if (m_mediator.m_lookup->GetSyncType() != SyncType::NO_SYNC) {
     if (!LOOKUP_NODE_MODE) {
-      if (m_mediator.m_lookup->GetSyncType() == SyncType::DS_SYNC) {
+      if (ins_byte != NodeInstructionType::DSBLOCK &&
+          ins_byte != NodeInstructionType::FORWARDTXNPACKET) {
         return true;
-      } else if (m_mediator.m_lookup->GetSyncType() ==
-                     SyncType::GUARD_DS_SYNC &&
-                 GUARD_MODE) {
-        return true;
-      }
-      if (!m_fromNewProcess) {
-        if (ins_byte != NodeInstructionType::DSBLOCK &&
-            ins_byte != NodeInstructionType::FORWARDTXNPACKET) {
-          return true;
-        }
-      } else {
-        if (m_runFromLate && ins_byte != NodeInstructionType::DSBLOCK &&
-            ins_byte != NodeInstructionType::FORWARDTXNPACKET) {
-          return true;
-        }
       }
     } else  // IS_LOOKUP_NODE
     {
