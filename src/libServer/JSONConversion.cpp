@@ -140,7 +140,7 @@ const Transaction JSONConversion::convertJsontoTx(const Json::Value& _json) {
   bytes toAddr_ser;
   if (!DataConversion::HexStrToUint8Vec(lower_case_addr, toAddr_ser)) {
     LOG_GENERAL(WARNING, "json cointaining invalid hex str for toAddr");
-    return Transaction();
+    BOOST_THROW_EXCEPTION(boost::algorithm::non_hex_input());
   }
 
   Address toAddr(toAddr_ser);
@@ -157,7 +157,8 @@ const Transaction JSONConversion::convertJsontoTx(const Json::Value& _json) {
   bytes pubKey_ser;
   if (!DataConversion::HexStrToUint8Vec(pubKey_str, pubKey_ser)) {
     LOG_GENERAL(WARNING, "json cointaining invalid hex str for pubkey");
-    return Transaction();
+    BOOST_THROW_EXCEPTION(boost::algorithm::non_hex_input());
+
   }
   PubKey pubKey(pubKey_ser, 0);
 
@@ -165,7 +166,7 @@ const Transaction JSONConversion::convertJsontoTx(const Json::Value& _json) {
   bytes sign;
   if (!DataConversion::HexStrToUint8Vec(sign_str, sign)) {
     LOG_GENERAL(WARNING, "json cointaining invalid hex str for sign");
-    return Transaction();
+    BOOST_THROW_EXCEPTION(boost::algorithm::non_hex_input());
   }
 
   bytes code, data;
