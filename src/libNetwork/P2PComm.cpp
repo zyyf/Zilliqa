@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <boost/algorithm/string.hpp>
 #include <cstring>
 #include <memory>
 
@@ -40,6 +41,7 @@
 #include "libCrypto/Sha2.h"
 #include "libUtils/DataConversion.h"
 #include "libUtils/DetachedFunction.h"
+#include "libUtils/IPConverter.h"
 #include "libUtils/JoinableFunction.h"
 #include "libUtils/Logger.h"
 #include "libUtils/SafeMath.h"
@@ -55,6 +57,7 @@ const unsigned int HASH_LEN = 32;
 const unsigned int GOSSIP_MSGTYPE_LEN = 1;
 const unsigned int GOSSIP_ROUND_LEN = 4;
 const unsigned int GOSSIP_SNDR_LISTNR_PORT_LEN = 4;
+const string PROXY_END_INDICATOR = "\r\n";
 
 P2PComm::Dispatcher P2PComm::m_dispatcher;
 P2PComm::BroadcastListFunc P2PComm::m_broadcast_list_retriever;
@@ -532,6 +535,33 @@ void P2PComm::EventCallback(struct bufferevent* bev, short events,
     return;
   }
 
+  unsigned int offset = 0;
+
+  if (LOOKUP_NODE_MODE) {  // only if am lookup node
+    string strMessage{message.begin(), message.end()};
+    auto index = strMessage.find(PROXY_END_INDICATOR);
+    if (index != std::string::npos) {
+      string strProxyHeader = strMessage.substr(0, index);
+      std::vector<std::string> proxy_parts;
+      boost::algorithm::split(proxy_parts, strProxyHeader,
+                              boost::algorithm::is_any_of(" "));
+      if (proxy_parts.size() == 6 && proxy_parts[0] == "PROXY" &&
+          proxy_parts[1] == "TCP4") {
+        string senderIPStr = proxy_parts[2];
+        boost::multiprecision::uint128_t actualSenderIPBeyondProxy;
+        if (!IPConverter::ToNumericalIPFromStr(senderIPStr,
+                                               actualSenderIPBeyondProxy)) {
+          return;
+        }
+        from.m_ipAddress = actualSenderIPBeyondProxy;
+        LOG_GENERAL(INFO, "Actual Sender IP: " << senderIPStr);
+        offset = index + strlen("\r\n");
+        message.clear();
+        message.assign(strMessage.begin() + offset, strMessage.end());
+      }
+    }
+  }
+
   // Reception format:
   // 0x01 ~ 0xFF - version, defined in constant file
   // 0x11 - start byte
@@ -559,7 +589,6 @@ void P2PComm::EventCallback(struct bufferevent* bev, short events,
     LOG_GENERAL(WARNING, "Empty message received.");
     return;
   }
-
   const unsigned char version = message[0];
   const unsigned char startByte = message[1];
 
