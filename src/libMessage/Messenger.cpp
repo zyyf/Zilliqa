@@ -319,7 +319,7 @@ inline bool CheckRequiredFieldsProtoTransactionCoreInfo(
   return protoTxnCoreInfo.has_version() && protoTxnCoreInfo.has_nonce() &&
          protoTxnCoreInfo.has_toaddr() && protoTxnCoreInfo.has_senderpubkey() &&
          protoTxnCoreInfo.has_amount() && protoTxnCoreInfo.has_gasprice() &&
-         protoTxnCoreInfo.has_gaslimit();
+         protoTxnCoreInfo.has_gaslimit() && protoTxnCoreInfo.has_sendtods();
 }
 
 inline bool CheckRequiredFieldsProtoTransactionReceipt(
@@ -1011,6 +1011,7 @@ void TransactionCoreInfoToProtobuf(const TransactionCoreInfo& txnCoreInfo,
   if (!txnCoreInfo.data.empty()) {
     protoTxnCoreInfo.set_data(txnCoreInfo.data.data(), txnCoreInfo.data.size());
   }
+  protoTxnCoreInfo.set_sendtods(txnCoreInfo.sendtods);
 }
 
 bool ProtobufToTransactionCoreInfo(
@@ -1044,6 +1045,7 @@ bool ProtobufToTransactionCoreInfo(
     copy(protoTxnCoreInfo.data().begin(), protoTxnCoreInfo.data().end(),
          txnCoreInfo.data.begin());
   }
+  txnCoreInfo.sendtods = protoTxnCoreInfo.sendtods();
   return true;
 }
 
