@@ -566,13 +566,6 @@ bool Lookup::GetDSInfoFromLookupNodes(bool initialDS) {
   return true;
 }
 
-bool Lookup::GetStateFromLookupNodes() {
-  LOG_MARKER();
-  SendMessageToRandomLookupNode(ComposeGetStateMessage());
-
-  return true;
-}
-
 bool Lookup::GetStateFromSeedNodes() {
   SendMessageToRandomSeedNode(ComposeGetStateMessage());
   return true;
