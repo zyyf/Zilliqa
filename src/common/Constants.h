@@ -149,7 +149,9 @@ extern const unsigned int SEED_TXN_COLLECTION_TIME_IN_SEC;
 extern const unsigned int COMMIT_WINDOW_IN_SECONDS;
 extern const unsigned int CONSENSUS_MSG_ORDER_BLOCK_WINDOW;
 extern const unsigned int CONSENSUS_OBJECT_TIMEOUT;
-extern const unsigned int NUM_CONSENSUS_SUBSETS;
+extern const unsigned int DS_NUM_CONSENSUS_SUBSETS;
+extern const unsigned int SHARD_NUM_CONSENSUS_SUBSETS;
+extern const unsigned int DELAY_NEXT_SUBSET_START;
 
 // Data sharing constants
 extern const bool BROADCAST_TREEBASED_CLUSTER_MODE;
@@ -254,6 +256,7 @@ extern const unsigned int SENDQUEUE_SIZE;
 extern const unsigned int MAX_GOSSIP_MSG_SIZE_IN_BYTES;
 extern const unsigned int MIN_READ_WATERMARK_IN_BYTES;
 extern const unsigned int MAX_READ_WATERMARK_IN_BYTES;
+extern const unsigned int CONNECTION_TIMEOUT_IN_SECONDS;
 
 // PoW constants
 extern const bool CUDA_GPU_MINE;

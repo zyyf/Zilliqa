@@ -19,6 +19,7 @@
 #include "common/Constants.h"
 #include "common/Messages.h"
 #include "libMessage/Messenger.h"
+#include "libNetwork/Guard.h"
 #include "libNetwork/P2PComm.h"
 #include "libUtils/BitVector.h"
 #include "libUtils/DataConversion.h"
@@ -107,13 +108,12 @@ void ConsensusLeader::GenerateConsensusSubsets() {
       peersWhoCommitted.push_back(index);
     }
   }
-  // Generate NUM_CONSENSUS_SUBSETS lists (= subsets of peersWhoCommitted)
+  // Generate m_numOfSubsets lists (= subsets of peersWhoCommitted)
   // If we have exactly the minimum num required for consensus, no point making
   // more than 1 subset
 
-  const unsigned int numSubsets = (peersWhoCommitted.size() < m_numForConsensus)
-                                      ? 1
-                                      : NUM_CONSENSUS_SUBSETS;
+  const unsigned int numSubsets =
+      (peersWhoCommitted.size() <= m_numForConsensus) ? 1 : m_numOfSubsets;
   LOG_GENERAL(INFO, "peersWhoCommitted = " << peersWhoCommitted.size() + 1);
   LOG_GENERAL(INFO, "m_numForConsensus = " << m_numForConsensus);
   LOG_GENERAL(INFO, "numSubsets        = " << numSubsets);
@@ -139,11 +139,54 @@ void ConsensusLeader::GenerateConsensusSubsets() {
     subset.commitPoints.emplace_back(m_commitPointMap.at(m_myID));
     subset.commitMap.at(m_myID) = true;
 
-    for (unsigned int j = 0; j < m_numForConsensus - 1; j++) {
-      unsigned int index = peersWhoCommitted.at(j);
-      subset.commitPointMap.at(index) = m_commitPointMap.at(index);
-      subset.commitPoints.emplace_back(m_commitPointMap.at(index));
-      subset.commitMap.at(index) = true;
+    // If DS consensus, then first subset should be of dsguard commits only.
+    // Fill in from rest if commits from dsguards < m_numForConsensus
+    if (m_DS && GUARD_MODE && (i == 0)) {
+      unsigned int subsetPeers = 1;  // myself
+      vector<unsigned int> nondsguardIndexes;
+      for (auto index : peersWhoCommitted) {
+        if (index < Guard::GetInstance().GetNumOfDSGuard()) {
+          subset.commitPointMap.at(index) = m_commitPointMap.at(index);
+          subset.commitPoints.emplace_back(m_commitPointMap.at(index));
+          subset.commitMap.at(index) = true;
+          subsetPeers++;
+          if (subsetPeers == m_numForConsensus) {
+            // got all dsguards commit
+            LOG_GENERAL(INFO, "[SubsetID: " << i << "] Got all "
+                                            << m_numForConsensus
+                                            << " commits from ds-guards");
+            break;
+          }
+        } else {
+          nondsguardIndexes.push_back(index);
+        }
+      }
+
+      // check if we fall short of commits from dsguards
+      if (subsetPeers < m_numForConsensus) {
+        // Add from rest of nondsguards commits
+        LOG_GENERAL(WARNING, "[SubsetID: " << i << "] Guards = " << subsetPeers
+                                           << ", Non-guards = "
+                                           << m_numForConsensus - subsetPeers);
+
+        for (auto index : nondsguardIndexes) {
+          subset.commitPointMap.at(index) = m_commitPointMap.at(index);
+          subset.commitPoints.emplace_back(m_commitPointMap.at(index));
+          subset.commitMap.at(index) = true;
+          if (++subsetPeers >= m_numForConsensus) {
+            break;
+          }
+        }
+      }
+    }
+    // For other subsets, its commit from every one together.
+    else {
+      for (unsigned int j = 0; j < m_numForConsensus - 1; j++) {
+        unsigned int index = peersWhoCommitted.at(j);
+        subset.commitPointMap.at(index) = m_commitPointMap.at(index);
+        subset.commitPoints.emplace_back(m_commitPointMap.at(index));
+        subset.commitMap.at(index) = true;
+      }
     }
 
     if (DEBUG_LEVEL >= 5) {
@@ -177,20 +220,28 @@ void ConsensusLeader::StartConsensusSubsets() {
   }
 
   m_numSubsetsRunning = m_consensusSubsets.size();
-  for (unsigned int index = 0; index < m_consensusSubsets.size(); index++) {
+  // subset 0 last to be started. giving community nodes the advantage
+  for (unsigned int index = m_consensusSubsets.size(); index > 0; index--) {
     // If overall state has somehow transitioned from CHALLENGE_DONE or
     // FINALCHALLENGE_DONE then it means consensus has ended and there's no
     // point in starting another subset
     if (m_state != CHALLENGE_DONE && m_state != FINALCHALLENGE_DONE) {
       break;
     }
-    ConsensusSubset& subset = m_consensusSubsets.at(index);
+
+    // delay starting every subset to avoid network congestion
+    if (index < m_consensusSubsets.size()) {
+      LOG_GENERAL(INFO, "[SubsetID: " << index << "] Waiting "
+                                      << DELAY_NEXT_SUBSET_START << " seconds");
+      this_thread::sleep_for(chrono::seconds(DELAY_NEXT_SUBSET_START));
+    }
+    ConsensusSubset& subset = m_consensusSubsets.at(index - 1);
     bytes challenge = {m_classByte, m_insByte, static_cast<uint8_t>(type)};
     bool result = GenerateChallengeMessage(
-        challenge, MessageOffset::BODY + sizeof(uint8_t), index);
+        challenge, MessageOffset::BODY + sizeof(uint8_t), index - 1);
     if (result) {
       // Update subset's internal state
-      SetStateSubset(index, m_state);
+      SetStateSubset(index - 1, m_state);
 
       // Add the leader to the responses
       Response r(*m_commitSecret, subset.challenge, m_myPrivKey);
@@ -203,7 +254,7 @@ void ConsensusLeader::StartConsensusSubsets() {
       // challenge Gossip causes all the backups (including those who did not
       // send commits) to send out a response, and this can cause the leader to
       // miss valid responses (e.g., if the message queue is filled)
-      if ((BROADCAST_GOSSIP_MODE) && (NUM_CONSENSUS_SUBSETS > 1)) {
+      if ((BROADCAST_GOSSIP_MODE) && (m_numOfSubsets > 1)) {
         // Gossip challenge within my all peers
         P2PComm::GetInstance().SpreadRumor(challenge);
       } else {
@@ -219,8 +270,8 @@ void ConsensusLeader::StartConsensusSubsets() {
         P2PComm::GetInstance().SendMessage(commit_peers, challenge);
       }
     } else {
-      SetStateSubset(index, ERROR);
-      SubsetEnded(index);
+      SetStateSubset(index - 1, ERROR);
+      SubsetEnded(index - 1);
     }
   }
 }
@@ -335,7 +386,7 @@ bool ConsensusLeader::ProcessMessageCommitCore(
     m_commitRedundantCounter++;
   }
 
-  if (NUM_CONSENSUS_SUBSETS > 1) {
+  if (m_numOfSubsets > 1) {
     // notify the waiting thread to start with subset creations and subset
     // consensus.
     if (m_commitCounter == m_committee.size()) {
@@ -489,8 +540,7 @@ bool ConsensusLeader::ProcessMessageResponseCore(
 
   // Check the subset id
   if (subsetID >= m_consensusSubsets.size()) {
-    LOG_GENERAL(WARNING,
-                "Subset ID " << subsetID << " >= " << NUM_CONSENSUS_SUBSETS);
+    LOG_GENERAL(WARNING, "Subset ID " << subsetID << " >= " << m_numOfSubsets);
     return false;
   }
 
@@ -624,7 +674,7 @@ bool ConsensusLeader::ProcessMessageResponseCore(
         P2PComm::GetInstance().SendMessage(peerInfo, collectivesig);
       }
 
-      if ((m_state == COLLECTIVESIG_DONE) && (NUM_CONSENSUS_SUBSETS > 1)) {
+      if ((m_state == COLLECTIVESIG_DONE) && (m_numOfSubsets > 1)) {
         // Start timer for accepting final commits
         // =================================
         auto func = [this]() -> void {
@@ -737,14 +787,18 @@ ConsensusLeader::ConsensusLeader(
     uint16_t node_id, const PrivKey& privkey, const DequeOfNode& committee,
     unsigned char class_byte, unsigned char ins_byte,
     NodeCommitFailureHandlerFunc nodeCommitFailureHandlerFunc,
-    ShardCommitFailureHandlerFunc shardCommitFailureHandlerFunc)
+    ShardCommitFailureHandlerFunc shardCommitFailureHandlerFunc, bool isDS)
     : ConsensusCommon(consensus_id, block_number, block_hash, node_id, privkey,
                       committee, class_byte, ins_byte),
+      m_DS(isDS),
       m_commitMap(committee.size(), false),
       m_commitPointMap(committee.size(), CommitPoint()),
       m_commitRedundantMap(committee.size(), false),
       m_commitRedundantPointMap(committee.size(), CommitPoint()) {
   LOG_MARKER();
+
+  m_numOfSubsets =
+      m_DS ? DS_NUM_CONSENSUS_SUBSETS : SHARD_NUM_CONSENSUS_SUBSETS;
 
   m_state = INITIAL;
   // m_numForConsensus = (floor(TOLERANCE_FRACTION * (pubkeys.size() - 1)) + 1);
@@ -824,7 +878,7 @@ bool ConsensusLeader::StartConsensus(
     P2PComm::GetInstance().SendMessage(peer, announcement_message);
   }
 
-  if (NUM_CONSENSUS_SUBSETS > 1) {
+  if (m_numOfSubsets > 1) {
     // Start timer for accepting commits
     // =================================
     auto func = [this]() -> void {

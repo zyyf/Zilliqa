@@ -109,8 +109,12 @@ const unsigned int CONSENSUS_MSG_ORDER_BLOCK_WINDOW{
     ReadConstantNumeric("CONSENSUS_MSG_ORDER_BLOCK_WINDOW", "node.consensus.")};
 const unsigned int CONSENSUS_OBJECT_TIMEOUT{
     ReadConstantNumeric("CONSENSUS_OBJECT_TIMEOUT", "node.consensus.")};
-const unsigned int NUM_CONSENSUS_SUBSETS{
-    ReadConstantNumeric("NUM_CONSENSUS_SUBSETS", "node.consensus.")};
+const unsigned int DS_NUM_CONSENSUS_SUBSETS{
+    ReadConstantNumeric("DS_NUM_CONSENSUS_SUBSETS", "node.consensus.")};
+const unsigned int SHARD_NUM_CONSENSUS_SUBSETS{
+    ReadConstantNumeric("SHARD_NUM_CONSENSUS_SUBSETS", "node.consensus.")};
+const unsigned int DELAY_NEXT_SUBSET_START{
+    ReadConstantNumeric("DELAY_NEXT_SUBSET_START", "node.consensus.")};
 
 // Data sharing constants
 const bool BROADCAST_TREEBASED_CLUSTER_MODE{
@@ -298,6 +302,8 @@ const unsigned int MIN_READ_WATERMARK_IN_BYTES{
     ReadConstantNumeric("MIN_READ_WATERMARK_IN_BYTES", "node.p2pcomm.")};
 const unsigned int MAX_READ_WATERMARK_IN_BYTES{
     ReadConstantNumeric("MAX_READ_WATERMARK_IN_BYTES", "node.p2pcomm.")};
+const unsigned int CONNECTION_TIMEOUT_IN_SECONDS{
+    ReadConstantNumeric("CONNECTION_TIMEOUT_IN_SECONDS", "node.p2pcomm.")};
 
 // PoW constants
 const bool CUDA_GPU_MINE{ReadConstantString("CUDA_GPU_MINE", "node.pow.") ==
