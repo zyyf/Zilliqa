@@ -77,6 +77,40 @@ void Guard::UpdateDSGuardlist() {
   }
 }
 
+void Guard::UpdatePendingDSGuardlist() {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(WARNING, "Not in Guard mode. DS guard is not available.");
+    return;
+  }
+
+  ifstream config("constants.xml");
+
+  if (config.fail()) {
+    LOG_GENERAL(WARNING, "No constants xml present");
+    return;
+  }
+
+  using boost::property_tree::ptree;
+  ptree pt;
+  read_xml(config, pt);
+
+  for (const ptree::value_type& v : pt.get_child("node.new_ds_guard")) {
+    if (v.first == "DSPUBKEY") {
+      bytes pubkeyBytes;
+      if (!DataConversion::HexStrToUint8Vec(v.second.data(), pubkeyBytes)) {
+        continue;
+      }
+      PubKey pubKey(pubkeyBytes, 0);
+      AddToPendingDSGuardlist(pubKey);
+    }
+  }
+
+  {
+    lock_guard<mutex> g(m_mutexDSGuardList);
+    LOG_GENERAL(INFO, "Entries = " << m_DSGuardList.size());
+  }
+}
+
 void Guard::UpdateShardGuardlist() {
   if (!GUARD_MODE) {
     LOG_GENERAL(WARNING, "Not in guard mode. Guard list is not available.");
@@ -121,6 +155,17 @@ void Guard::AddToDSGuardlist(const PubKey& dsGuardPubKey) {
   // LOG_GENERAL(INFO, "Added " << dsGuardPubKey);
 }
 
+void Guard::AddToPendingDSGuardlist(const PubKey& pendingDSGuardPubKey) {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(WARNING, "Not in Guard mode. Guard list is not available.");
+    return;
+  }
+
+  lock_guard<mutex> g(m_mutexPendingDSGuardList);
+  m_PendingDSGuardList.emplace(pendingDSGuardPubKey);
+  // LOG_GENERAL(INFO, "Added " << dsGuardPubKey);
+}
+
 void Guard::AddToShardGuardlist(const PubKey& shardGuardPubKey) {
   if (!GUARD_MODE) {
     LOG_GENERAL(WARNING, "Not in Guard mode. Guard list is not available.");
@@ -141,6 +186,16 @@ bool Guard::IsNodeInDSGuardList(const PubKey& nodePubKey) {
   return (m_DSGuardList.find(nodePubKey) != m_DSGuardList.end());
 }
 
+bool Guard::IsNodeInPendingDSGuardList(const PubKey& nodePubKey) {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(WARNING, "Not in Guard mode. DS guard is not available.");
+    return false;
+  }
+
+  lock_guard<mutex> g(m_mutexPendingDSGuardList);
+  return (m_PendingDSGuardList.find(nodePubKey) != m_PendingDSGuardList.end());
+}
+
 bool Guard::IsNodeInShardGuardList(const PubKey& nodePubKey) {
   if (!GUARD_MODE) {
     LOG_GENERAL(WARNING, "Not in Guard mode. Shard guard is not available.");
@@ -155,6 +210,12 @@ unsigned int Guard::GetNumOfDSGuard() {
   lock_guard<mutex> g(m_mutexDSGuardList);
   return m_DSGuardList.size();
 }
+
+unsigned int Guard::GetNumOfPendingDSGuard() {
+  lock_guard<mutex> g(m_mutexPendingDSGuardList);
+  return m_PendingDSGuardList.size();
+}
+
 unsigned int Guard::GetNumOfShardGuard() {
   lock_guard<mutex> g(m_mutexShardGuardList);
   return m_ShardGuardList.size();
@@ -242,6 +303,7 @@ void Guard::Init() {
     ValidateRunTimeEnvironment();
     UpdateDSGuardlist();
     UpdateShardGuardlist();
+    UpdatePendingDSGuardlist();  // Should only be called once
   }
 
   if (EXCLUDE_PRIV_IP) {
