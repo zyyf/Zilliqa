@@ -112,15 +112,24 @@ bool Node::StartPoW(const uint64_t& block_num, uint8_t ds_difficulty,
 
   ethash_mining_result winning_result;
 
+  // Diff reduction for guard
   uint32_t shardGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
+  uint32_t incomingDSGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
+
   auto headerHash = POW::GenHeaderHash(
       rand1, rand2, m_mediator.m_selfPeer.m_ipAddress,
       m_mediator.m_selfKey.second, lookupId, m_proposedGasPrice);
+
   // Only in guard mode that shard guard can submit diffferent PoW
   if (GUARD_MODE && Guard::GetInstance().IsNodeInShardGuardList(
                         m_mediator.m_selfKey.second)) {
     winning_result = POW::GetInstance().PoWMine(
         block_num, shardGuardDiff, m_mediator.m_selfKey, headerHash,
+        FULL_DATASET_MINE, std::time(0));
+  } else if (GUARD_MODE && Guard::GetInstance().IsNodeInPendingDSGuardList(
+                        m_mediator.m_selfKey.second))}{
+    winning_result = POW::GetInstance().PoWMine(
+        block_num, incomingDSGuardDiff, m_mediator.m_selfKey, headerHash,
         FULL_DATASET_MINE, std::time(0));
   } else {
     winning_result =
@@ -197,6 +206,16 @@ bool Node::StartPoW(const uint64_t& block_num, uint8_t ds_difficulty,
     if (GUARD_MODE && Guard::GetInstance().IsNodeInShardGuardList(
                           m_mediator.m_selfKey.second)) {
       if (!SendPoWResultToDSComm(block_num, shardGuardDiff,
+                                 winning_result.winning_nonce,
+                                 winning_result.result, winning_result.mix_hash,
+                                 lookupId, m_proposedGasPrice)) {
+        return false;
+      } else {
+        DetachedFunction(1, checkerThread);
+      }
+    } else if (GUARD_MODE && Guard::GetInstance().IsNodeInPendingDSGuardList(
+                          m_mediator.m_selfKey.second)) {
+      if (!SendPoWResultToDSComm(block_num, incomingDSGuardDiff,
                                  winning_result.winning_nonce,
                                  winning_result.result, winning_result.mix_hash,
                                  lookupId, m_proposedGasPrice)) {
