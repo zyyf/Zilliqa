@@ -229,7 +229,8 @@ bool DirectoryService::ProcessPoWSubmissionFromPacket(
   uint8_t expectedDSDiff = DS_POW_DIFFICULTY;
   uint8_t expectedDiff = POW_DIFFICULTY;
   uint8_t expectedShardGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
-  uint8_t expectedIncomingDSGuardDiff = DS_POW_DIFFICULTY / DS_POW_DIFFICULTY + 1;
+  uint8_t expectedIncomingDSGuardDiff =
+      DS_POW_DIFFICULTY / DS_POW_DIFFICULTY + 1;
 
   uint8_t difficultyLevel = sol.GetDifficultyLevel();
   uint64_t blockNumber = sol.GetBlockNumber();
@@ -361,7 +362,8 @@ bool DirectoryService::ProcessPoWSubmissionFromPacket(
       }
 
       // Push the same solution into the DS PoW list if it qualifies
-      if (difficultyLevel >= expectedDSDiff || difficultyLevel == expectedIncomingDSGuardDiff) {
+      if (difficultyLevel >= expectedDSDiff ||
+          difficultyLevel == expectedIncomingDSGuardDiff) {
         AddDSPoWs(submitterPubKey, soln);
       }
 
