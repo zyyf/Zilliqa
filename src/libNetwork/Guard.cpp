@@ -162,7 +162,7 @@ void Guard::AddToPendingDSGuardlist(const PubKey& pendingDSGuardPubKey) {
   }
 
   lock_guard<mutex> g(m_mutexPendingDSGuardList);
-  m_PendingDSGuardList.emplace(pendingDSGuardPubKey);
+  m_PendingDSGuardList.emplace_back(pendingDSGuardPubKey);
   // LOG_GENERAL(INFO, "Added " << dsGuardPubKey);
 }
 
@@ -193,7 +193,8 @@ bool Guard::IsNodeInPendingDSGuardList(const PubKey& nodePubKey) {
   }
 
   lock_guard<mutex> g(m_mutexPendingDSGuardList);
-  return (m_PendingDSGuardList.find(nodePubKey) != m_PendingDSGuardList.end());
+  return (find(m_PendingDSGuardList.begin(), m_PendingDSGuardList.end(),
+               nodePubKey) != m_PendingDSGuardList.end());
 }
 
 bool Guard::IsNodeInShardGuardList(const PubKey& nodePubKey) {
@@ -219,6 +220,19 @@ unsigned int Guard::GetNumOfPendingDSGuard() {
 unsigned int Guard::GetNumOfShardGuard() {
   lock_guard<mutex> g(m_mutexShardGuardList);
   return m_ShardGuardList.size();
+}
+
+vector<PubKey> Guard::GetPendingDSGuardList() {
+  lock_guard<mutex> g(m_mutexPendingDSGuardList);
+  return m_PendingDSGuardList;
+}
+
+void Guard::RemoveFromPendingDSGuarDList(const PubKey& pendingGuardPubKey) {
+  lock_guard<mutex> g(m_mutexPendingDSGuardList);
+  m_PendingDSGuardList.erase(
+      remove(m_PendingDSGuardList.begin(), m_PendingDSGuardList.end(),
+             pendingGuardPubKey),
+      m_PendingDSGuardList.end());
 }
 
 bool Guard::IsValidIP(const uint128_t& ip_addr) {

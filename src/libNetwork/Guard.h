@@ -44,7 +44,7 @@ class Guard {
 
   // For new incoming DS guard
   std::mutex m_mutexPendingDSGuardList;
-  std::unordered_set<PubKey> m_PendingDSGuardList;
+  std::vector<PubKey> m_PendingDSGuardList;
 
   // Shard guardlist
   std::mutex m_mutexShardGuardList;
@@ -67,17 +67,18 @@ class Guard {
 
   void AddToDSGuardlist(const PubKey& dsGuardPubKey);
   void AddToPendingDSGuardlist(const PubKey& pendingDSGuardPubKey);
-
   void AddToShardGuardlist(const PubKey& shardGuardPubKey);
 
   bool IsNodeInDSGuardList(const PubKey& nodePubKey);
   bool IsNodeInPendingDSGuardList(const PubKey& nodePubKey);
-
   bool IsNodeInShardGuardList(const PubKey& nodePubKey);
 
   unsigned int GetNumOfDSGuard();
   unsigned int GetNumOfPendingDSGuard();
   unsigned int GetNumOfShardGuard();
+
+  std::vector<PubKey> GetPendingDSGuardList();
+  void RemoveFromPendingDSGuarDList(const PubKey& pendingGuardPubKey);
 
   // To check if IP is a valid v4 IP and not belongs to exclusion list
   bool IsValidIP(const boost::multiprecision::uint128_t& ip_addr);
