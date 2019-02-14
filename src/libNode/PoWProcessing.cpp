@@ -114,7 +114,7 @@ bool Node::StartPoW(const uint64_t& block_num, uint8_t ds_difficulty,
 
   // Diff reduction for guard
   uint32_t shardGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
-  uint32_t incomingDSGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
+  uint32_t incomingDSGuardDiff = DS_POW_DIFFICULTY / DS_POW_DIFFICULTY + 1;
 
   auto headerHash = POW::GenHeaderHash(
       rand1, rand2, m_mediator.m_selfPeer.m_ipAddress,
