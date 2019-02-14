@@ -226,6 +226,11 @@ bool DirectoryService::ProcessPoWSubmissionFromPacket(
     return false;
   }
 
+  uint8_t expectedDSDiff = DS_POW_DIFFICULTY;
+  uint8_t expectedDiff = POW_DIFFICULTY;
+  uint8_t expectedShardGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
+  uint8_t expectedIncomingDSGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
+
   uint8_t difficultyLevel = sol.GetDifficultyLevel();
   uint64_t blockNumber = sol.GetBlockNumber();
   Peer submitterPeer = sol.GetSubmitterPeer();
@@ -273,10 +278,6 @@ bool DirectoryService::ProcessPoWSubmissionFromPacket(
 
   LOG_GENERAL(INFO, "Block = " << blockNumber);
 
-  uint8_t expectedDSDiff = DS_POW_DIFFICULTY;
-  uint8_t expectedDiff = POW_DIFFICULTY;
-  uint8_t expectedShardGuardDiff = POW_DIFFICULTY / POW_DIFFICULTY;
-
   // Non-genesis block
   if (blockNumber > 1) {
     expectedDSDiff =
@@ -295,12 +296,20 @@ bool DirectoryService::ProcessPoWSubmissionFromPacket(
     }
   } else {
     if (difficultyLevel != expectedDSDiff && difficultyLevel != expectedDiff &&
-        difficultyLevel != expectedShardGuardDiff) {
+        difficultyLevel != expectedShardGuardDiff &&
+        difficultyLevel != expectedIncomingDSGuardDiff) {
       LOG_CHECK_FAIL("Difficulty level", to_string(difficultyLevel),
                      to_string(expectedDSDiff)
                          << " or " << to_string(expectedDiff) << " or "
                          << to_string(expectedShardGuardDiff));
       // TODO: penalise sender in reputation manager
+      return false;
+    } else if (difficultyLevel == expectedDSDiff ||
+               difficultyLevel == expectedIncomingDSGuardDiff) {
+      if (!Guard::GetInstance().IsNodeInShardGuardList(submitterPubKey) &&
+          !Guard::GetInstance().IsNodeInPendingDSGuardList(submitterPubKey))
+        LOG_GENERAL(WARNING,
+                    "Not a guard but submitted guard pow " << submitterPubKey);
       return false;
     }
   }
