@@ -127,7 +127,7 @@ bool Node::StartPoW(const uint64_t& block_num, uint8_t ds_difficulty,
         block_num, shardGuardDiff, m_mediator.m_selfKey, headerHash,
         FULL_DATASET_MINE, std::time(0));
   } else if (GUARD_MODE && Guard::GetInstance().IsNodeInPendingDSGuardList(
-                        m_mediator.m_selfKey.second))}{
+                               m_mediator.m_selfKey.second)) {
     winning_result = POW::GetInstance().PoWMine(
         block_num, incomingDSGuardDiff, m_mediator.m_selfKey, headerHash,
         FULL_DATASET_MINE, std::time(0));
@@ -214,7 +214,7 @@ bool Node::StartPoW(const uint64_t& block_num, uint8_t ds_difficulty,
         DetachedFunction(1, checkerThread);
       }
     } else if (GUARD_MODE && Guard::GetInstance().IsNodeInPendingDSGuardList(
-                          m_mediator.m_selfKey.second)) {
+                                 m_mediator.m_selfKey.second)) {
       if (!SendPoWResultToDSComm(block_num, incomingDSGuardDiff,
                                  winning_result.winning_nonce,
                                  winning_result.result, winning_result.mix_hash,
