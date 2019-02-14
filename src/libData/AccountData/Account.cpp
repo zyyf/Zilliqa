@@ -37,7 +37,6 @@ using namespace Contract;
 
 // =======================================
 // AccountBase
-
 AccountBase::AccountBase(const uint128_t& balance, const uint64_t& nonce,
                          const uint32_t& version)
     : m_version(version),
