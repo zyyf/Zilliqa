@@ -62,6 +62,34 @@ unsigned int DirectoryService::ComputeDSBlockParameters(
   unsigned int numOfElectedDSMembers =
       min(sortedDSPoWSolns.size(), (size_t)NUM_DS_ELECTION);
   unsigned int counter = 0;
+
+  // Select incoming ds guard sequentially
+  for (const auto& incomingguardPubkey :
+       Guard::GetInstance().GetPendingDSGuardList()) {
+    if (counter >= numOfElectedDSMembers) {
+      break;
+    }
+
+    if (m_allDSPoWs.find(incomingguardPubkey) != m_allDSPoWs.end()) {
+      LOG_GENERAL(INFO, "Adding dsguard " << incomingguardPubkey);
+      powDSWinners[incomingguardPubkey] = m_allPoWConns[incomingguardPubkey];
+      dsWinnerPoWs[incomingguardPubkey] = m_allDSPoWs[incomingguardPubkey];
+
+      sortedPoWSolns.erase(
+          remove(sortedPoWSolns.begin(), sortedPoWSolns.end(),
+                 make_pair(m_allDSPoWs.at(incomingguardPubkey).result,
+                           incomingguardPubkey)),
+          sortedPoWSolns.end());
+      counter++;
+    } else {
+      // Can't find the next pending ds guard. Proceed to select ds committee
+      // member
+      break;
+    }
+  }
+
+  LOG_GENERAL(INFO, "Select new ds committee member");
+  // Select new ds member
   for (const auto& submitter : sortedDSPoWSolns) {
     if (counter >= numOfElectedDSMembers) {
       break;
@@ -73,9 +101,10 @@ unsigned int DirectoryService::ComputeDSBlockParameters(
         sortedPoWSolns.end());
     counter++;
   }
+
   if (sortedDSPoWSolns.size() == 0) {
-    LOG_GENERAL(WARNING, "No soln met the DS difficulty level");
-    // TODO: To handle if no PoW soln can meet DS difficulty level.
+    // No new ds member elect. No existing ds member ejected
+    LOG_GENERAL(WARNING, "No soln met the DS diff level");
   }
 
   blockNum = 0;
