@@ -208,26 +208,50 @@ bool Guard::IsNodeInShardGuardList(const PubKey& nodePubKey) {
 }
 
 unsigned int Guard::GetNumOfDSGuard() {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(WARNING, "Not in Guard mode. DS guard is not available.");
+    return 0;
+  }
   lock_guard<mutex> g(m_mutexDSGuardList);
   return m_DSGuardList.size();
 }
 
 unsigned int Guard::GetNumOfPendingDSGuard() {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(WARNING,
+                "Not in Guard mode. Pending DS guard is not available.");
+    return 0;
+  }
   lock_guard<mutex> g(m_mutexPendingDSGuardList);
   return m_PendingDSGuardList.size();
 }
 
 unsigned int Guard::GetNumOfShardGuard() {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(WARNING, "Not in Guard mode. Shard guard is not available.");
+    return false;
+  }
   lock_guard<mutex> g(m_mutexShardGuardList);
   return m_ShardGuardList.size();
 }
 
 vector<PubKey> Guard::GetPendingDSGuardList() {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(WARNING,
+                "Not in Guard mode. Pending DS guard is not available.");
+    return vector<PubKey>();
+  }
   lock_guard<mutex> g(m_mutexPendingDSGuardList);
   return m_PendingDSGuardList;
 }
 
 void Guard::RemoveFromPendingDSGuarDList(const PubKey& pendingGuardPubKey) {
+  if (!GUARD_MODE) {
+    LOG_GENERAL(
+        WARNING,
+        "Not in Guard mode. No removal of pending DS guard is not available.");
+    return;
+  }
   lock_guard<mutex> g(m_mutexPendingDSGuardList);
   m_PendingDSGuardList.erase(
       remove(m_PendingDSGuardList.begin(), m_PendingDSGuardList.end(),
