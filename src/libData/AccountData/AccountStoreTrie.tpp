@@ -90,6 +90,11 @@ bool AccountStoreTrie<DB, MAP>::UpdateStateTrie(const Address& address,
     return false;
   }
 
+  if (m_state.contains(address)) {
+    // LOG_GENERAL(INFO, "clean " << address);
+    m_state.remove(address);
+  }
+
   m_state.insert(address, rawBytes);
 
   return true;

@@ -221,7 +221,7 @@ bool AccountStore::MoveUpdatesToDisk() {
   }
 
   try {
-    RepopulateStateTrie();
+    // RepopulateStateTrie();
     m_state.db()->commit();
     m_prevRoot = m_state.root();
     MoveRootToDisk(m_prevRoot);
@@ -234,23 +234,6 @@ bool AccountStore::MoveUpdatesToDisk() {
   m_addressToAccount->clear();
 
   return true;
-}
-
-void AccountStore::DiscardUnsavedUpdates() {
-  LOG_MARKER();
-
-  unique_lock<shared_timed_mutex> g(m_mutexPrimary, defer_lock);
-  unique_lock<mutex> g2(m_mutexDB, defer_lock);
-  lock(g, g2);
-
-  try {
-    m_state.db()->rollback();
-    m_state.setRoot(m_prevRoot);
-    m_addressToAccount->clear();
-  } catch (const boost::exception& e) {
-    LOG_GENERAL(WARNING, "Error with AccountStore::DiscardUnsavedUpdates. "
-                             << boost::diagnostic_information(e));
-  }
 }
 
 bool AccountStore::RetrieveFromDisk() {

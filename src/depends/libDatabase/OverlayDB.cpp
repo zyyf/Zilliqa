@@ -99,5 +99,6 @@ namespace dev
 	void OverlayDB::kill(h256 const& _h)
 	{
 		MemoryDB::kill(_h);
+		m_levelDB.DeleteKey(_h);
 	}
 }

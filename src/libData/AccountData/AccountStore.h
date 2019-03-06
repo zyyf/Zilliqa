@@ -126,9 +126,7 @@ class AccountStore
 
   /// commit the in-memory states into persistent storage
   bool MoveUpdatesToDisk();
-  /// discard all the changes in memory and reset the states from last
-  /// checkpoint in persistent storage
-  void DiscardUnsavedUpdates();
+
   /// repopulate the in-memory data structures from persistent storage
   bool RetrieveFromDisk();
 
