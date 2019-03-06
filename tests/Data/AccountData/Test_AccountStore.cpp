@@ -92,16 +92,6 @@ BOOST_AUTO_TEST_CASE(commitAndRollback) {
       AccountStore::GetInstance().GetStateRootHash() != root1,
       "Wrong root: Call to GetBalance() failed to update the root hash!");
 
-  // Roll back
-  // Check that balance and root hash are also rolled back
-  AccountStore::GetInstance().DiscardUnsavedUpdates();
-  BOOST_CHECK_MESSAGE(AccountStore::GetInstance().GetBalance(address1) == 1,
-                      "Wrong balance: Call to DiscardUnsavedUpdates() failed "
-                      "to revert account at addr!");
-  BOOST_CHECK_MESSAGE(AccountStore::GetInstance().GetStateRootHash() == root1,
-                      "Wrong root: Call to DiscardUnsavedUpdates() failed to "
-                      "revert the root hash!");
-
   // Update entry contents
   AccountStore::GetInstance().IncreaseBalance(address1, 9);
   AccountStore::GetInstance().UpdateStateTrieAll();
@@ -878,7 +868,7 @@ BOOST_AUTO_TEST_CASE(DiskOperation2) {
                             << ", size of state db: " << output);
     }
 
-    for (auto i = 0; i < 2; i++) {
+    for (auto i = 0; i < 25; i++) {
       AccountStore::GetInstance().InitSoft();
       AccountStore::GetInstance().RetrieveFromDisk();
 
