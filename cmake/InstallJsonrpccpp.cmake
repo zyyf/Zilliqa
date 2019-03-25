@@ -61,6 +61,7 @@ else()
 endif()
 
 set(JSONRPC_INCLUDE_DIR ${INSTALL_DIR}/include)
+set(JSONRPC_LIBRARIES ${INSTALL_DIR}/lib)
 file(MAKE_DIRECTORY ${JSONRPC_INCLUDE_DIR})  # Must exist.
 
 add_library(jsonrpc::common STATIC IMPORTED)

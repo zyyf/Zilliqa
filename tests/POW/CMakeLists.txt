@@ -6,7 +6,7 @@ else(CMAKE_CONFIGURATION_TYPES)
     configure_file(${CMAKE_SOURCE_DIR}/constants.xml constants.xml COPYONLY)
 endif(CMAKE_CONFIGURATION_TYPES)
 
-link_directories(${CMAKE_BINARY_DIR}/lib)
+link_directories(${CMAKE_BINARY_DIR}/lib ${JSONRPC_LIBRARIES})
 add_executable (Test_POW test_POW.cpp)
 target_link_libraries(Test_POW PUBLIC ethash POW DirectoryService Lookup Node Server Utils Crypto Boost::unit_test_framework Boost::filesystem)
 target_include_directories (Test_POW PUBLIC ${PROJECT_SOURCE_DIR}/src)
