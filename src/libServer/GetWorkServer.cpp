@@ -18,7 +18,7 @@
 #include <chrono>
 
 #include "depends/libethash/include/ethash/ethash.hpp"
-#include "depends/safeserver/safehttpserver.h"
+#include "jsonrpccpp/server/connectors/httpserver.h"
 
 #include "GetWorkServer.h"
 #include "common/Constants.h"
@@ -36,7 +36,7 @@ static ethash_mining_result_t FAIL_RESULT = {"", "", 0, false};
 
 // GetInstance returns the singleton instance
 GetWorkServer& GetWorkServer::GetInstance() {
-  static SafeHttpServer httpserver(GETWORK_SERVER_PORT);
+  static HttpServer httpserver(GETWORK_SERVER_PORT);
   static GetWorkServer powserver(httpserver);
   return powserver;
 }

@@ -21,7 +21,7 @@
 #include "common/Constants.h"
 #include "common/MessageNames.h"
 #include "common/Serializable.h"
-#include "depends/safeserver/safehttpserver.h"
+#include "jsonrpccpp/server/connectors/httpserver.h"
 #include "libCrypto/Schnorr.h"
 #include "libCrypto/Sha2.h"
 #include "libData/AccountData/Address.h"
@@ -156,7 +156,7 @@ Zilliqa::Zilliqa(const PairOfKey& key, const Peer& peer, SyncType syncType,
 
   m_validator = make_shared<Validator>(m_mediator);
 
-  m_serverConnector = make_unique<SafeHttpServer>(SERVER_PORT);
+  m_serverConnector = make_unique<HttpServer>(SERVER_PORT);
 
   if (m_serverConnector == nullptr) {
     LOG_GENERAL(FATAL, "m_serverConnector NULL");
