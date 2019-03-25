@@ -28,7 +28,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "jsonrpccpp/client.h"
 #include "jsonrpccpp/client/connectors/httpclient.h"
 
 #include "common/Constants.h"

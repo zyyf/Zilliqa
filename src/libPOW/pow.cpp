@@ -24,6 +24,7 @@
 #include "common/Serializable.h"
 #include "depends/libethash/include/ethash/ethash.hpp"
 #include "depends/libethash/lib/ethash/ethash-internal.hpp"
+#include "jsonrpccpp/client/client.h"
 #include "libCrypto/Sha2.h"
 #include "libServer/GetWorkServer.h"
 #include "libUtils/DataConversion.h"
