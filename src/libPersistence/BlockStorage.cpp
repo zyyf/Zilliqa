@@ -1264,6 +1264,7 @@ std::vector<std::string> BlockStorage::GetDBName(DBTYPE type) {
     case TEMP_STATE: {
       lock_guard<mutex> g(m_mutexTempState);
       ret.push_back(m_tempStateDB->GetDBName());
+      break;
     }
     case DIAGNOSTIC_NODES: {
       lock_guard<mutex> g(m_mutexDiagnostic);
