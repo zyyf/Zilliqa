@@ -20,6 +20,7 @@ FROM ${BASE}
 RUN apt-get update \
     && apt-get install -y software-properties-common \
     && add-apt-repository ppa:tah83/secp256k1 -y \
+    && add-apt-repository ppa:ubuntu-toolchain-r/test -y \
     && apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
     build-essential \
@@ -27,6 +28,8 @@ RUN apt-get update \
     cmake \
     # curl is not a build dependency
     curl \
+    gcc-8 \
+    g++-8 \
     git \
     golang \
     libboost-filesystem-dev \
@@ -50,7 +53,9 @@ RUN apt-get update \
     python \
     python-pip \
     libsecp256k1-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 60 --slave /usr/bin/g++ g++ /usr/bin/g++-8 \
+    && update-alternatives --config gcc
 
 # Intentionally left blank unless specific commit is provided in commandline
 ARG COMMIT=
