@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
-    message(STATUS "Found ccache")
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+
+if(NOT MEMORY_SANITIZER)
+	if(CCACHE_PROGRAM)
+	    message(STATUS "Found ccache")
+	    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+	endif()
 endif()
 
 project(Zilliqa)
@@ -39,6 +42,11 @@ find_package(Threads REQUIRED)
 if(NOT TARGET jsonrpc-project)
     include(InstallJsonrpccpp)
 endif()
+
+#set(MSAN_DIR ) Uncomment this and set the instrumented libstdc++ directory here or use export
+set(LD_PRELOAD ${MSAN_DIR}/lib/libc++.so ${MSAN_DIR}/lib/libc++abi.so)
+
+message(STATUS "LD_PRE: ${LD_PRELOAD}")
 
 include(InstallG3log)
 find_package(g3logger CONFIG REQUIRED)
@@ -234,11 +242,15 @@ if (ADDRESS_SANITIZER)
 endif()
 
 if (MEMORY_SANITIZER)
+	if(NOT DEFINED MSAN_DIR)
+		message(FATAL_ERROR  "Set env variable MSAN_DIR")
+		return()
+	endif()
     add_compile_options(-fsanitize=memory)
     add_compile_options(-fsanitize-memory-track-origins=2)
     add_compile_options(-fno-omit-frame-pointer)
     add_compile_options(-fPIE)
-    link_libraries(-fsanitize=memory)
+    link_libraries(-fsanitize=memory ${MSAN_DIR}/lib/libc++.so.1 ${MSAN_DIR}/lib/libc++.so ${MSAN_DIR}/lib/libstdc++.so.6)
     message(STATUS "MEMORY SANITIZER enabled")
 endif()
 
