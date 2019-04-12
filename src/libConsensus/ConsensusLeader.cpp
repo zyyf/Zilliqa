@@ -266,23 +266,27 @@ bool ConsensusLeader::StartConsensusSubsets() {
 }
 
 void ConsensusLeader::LogResponsesStats(unsigned int subsetID) {
-  if (m_DS && GUARD_MODE) {
-    LOG_MARKER();
+  LOG_MARKER();
+
+  if (GUARD_MODE) {
     ConsensusSubset& subset = m_consensusSubsets.at(subsetID);
-    unsigned int dsguardCount = 0, nondsguardCount = 0;
+    unsigned int guardCount = 0, nonguardCount = 0;
+
     for (unsigned int i = 0; i < subset.responseMap.size(); i++) {
       if (subset.responseMap[i]) {
-        if (i < Guard::GetInstance().GetNumOfDSGuard()) {
-          dsguardCount++;
+        if ((m_DS && i < Guard::GetInstance().GetNumOfDSGuard()) ||
+            (!m_DS && Guard::GetInstance().IsNodeInShardGuardList(
+                          m_committee.at(i).first))) {
+          guardCount++;
         } else {
-          nondsguardCount++;
+          nonguardCount++;
         }
       }
     }
-    LOG_GENERAL(
-        INFO, "[SubsetID: " << subsetID
-                            << "] Responses received: Guards = " << dsguardCount
-                            << ", Non-guards = " << nondsguardCount);
+
+    LOG_GENERAL(INFO, "[SubsetID: "
+                          << subsetID << "] Responses received: Guards = "
+                          << guardCount << ", Non-guards = " << nonguardCount);
   }
 }
 

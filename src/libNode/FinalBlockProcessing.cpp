@@ -641,6 +641,14 @@ bool Node::ProcessFinalBlockCore(const bytes& message, unsigned int offset,
               cv_lk, std::chrono::seconds(CONSENSUS_MSG_ORDER_BLOCK_WINDOW)) ==
           std::cv_status::timeout) {
         LOG_GENERAL(WARNING, "Timeout, I didn't finish microblock consensus");
+
+        if (m_isPrimary) {
+          ConsensusLeader* cl =
+              dynamic_cast<ConsensusLeader*>(m_consensusObject.get());
+          if (cl != nullptr) {
+            cl->Audit();
+          }
+        }
       }
     }
 
