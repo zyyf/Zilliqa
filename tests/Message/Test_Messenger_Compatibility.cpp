@@ -188,4 +188,104 @@ BOOST_AUTO_TEST_CASE(test_dsblock_header) {
                         << protoDSBlockHeader.removeddskey_size());
 }
 
+BOOST_AUTO_TEST_CASE(test_dsblock_header_1) {
+  LOG_GENERAL(INFO, "\n\ntest_dsblock_header_1\n\n");
+
+  ProtoDSBlock::DSBlockHeader protoDSBlockHeader;
+
+  ZilliqaMessage::ProtoBlockHeaderBase* protoBlockHeaderBase =
+      protoDSBlockHeader.mutable_blockheaderbase();
+
+  DSBlockHeader oldDsBlockHeader;
+
+  // version
+  protoBlockHeaderBase->set_version(oldDsBlockHeader.GetVersion());
+  // committee hash
+  protoBlockHeaderBase->set_committeehash(
+      oldDsBlockHeader.GetCommitteeHash().data(),
+      oldDsBlockHeader.GetCommitteeHash().size);
+  protoBlockHeaderBase->set_prevhash(oldDsBlockHeader.GetPrevHash().data(),
+                                     oldDsBlockHeader.GetPrevHash().size);
+  protoDSBlockHeader.set_dsdifficulty(5);
+  protoDSBlockHeader.set_difficulty(3);
+  NumberToProtobufByteArray<uint128_t, UINT128_SIZE>(
+      10000, *protoDSBlockHeader.mutable_gasprice());
+
+  Schnorr& schnorr = Schnorr::GetInstance();
+
+  std::map<PubKey, Peer> dsPoWWinners;
+  for (int i = 0; i < 10; ++i) {
+    auto powdswinner = protoDSBlockHeader.add_dswinners();
+    PairOfKey keypair = schnorr.GenKeyPair();
+    Peer peer = TestUtils::GenerateRandomPeer();
+    dsPoWWinners[keypair.second] = peer;
+    SerializableToProtobufByteArray(keypair.second,
+                                    *powdswinner->mutable_key());
+    SerializableToProtobufByteArray(peer, *powdswinner->mutable_val());
+  }
+
+  std::vector<PubKey> removedDSNodes;
+  for (int i = 0; i < 2; ++i) {
+    auto pubKey = protoDSBlockHeader.add_removeddskey();
+    PairOfKey keypair = schnorr.GenKeyPair();
+    SerializableToProtobufByteArray(keypair.second, *pubKey);
+  }
+
+  PairOfKey leaderKeypair = schnorr.GenKeyPair();
+  SerializableToProtobufByteArray(leaderKeypair.second,
+                                  *protoDSBlockHeader.mutable_leaderpubkey());
+
+  protoDSBlockHeader.set_blocknum(100);
+  protoDSBlockHeader.set_epochnum(10000);
+  SWInfo swInfo;
+  SerializableToProtobufByteArray(swInfo, *protoDSBlockHeader.mutable_swinfo());
+
+  ZilliqaMessage::ProtoDSBlock::DSBlockHashSet* protoHeaderHash =
+      protoDSBlockHeader.mutable_hash();
+  protoHeaderHash->set_shardinghash(oldDsBlockHeader.GetShardingHash().data(),
+                                    oldDsBlockHeader.GetShardingHash().size);
+  protoHeaderHash->set_reservedfield(
+      oldDsBlockHeader.GetHashSetReservedField().data(),
+      oldDsBlockHeader.GetHashSetReservedField().size());
+
+  if (!protoDSBlockHeader.IsInitialized()) {
+    LOG_GENERAL(WARNING,
+                "ProtoDSBlock::OldDSBlockHeader initialization failed");
+    return;
+  }
+
+  bytes dst;
+  SerializeToArray(protoDSBlockHeader, dst, 0);
+  LOG_GENERAL(INFO, "Sizeof serialized protoDSBlockHeader = " << dst.size());
+
+  ProtoDSBlock::OldDSBlockHeader oldProtoDSBlockHeader;
+
+  oldProtoDSBlockHeader.ParseFromArray(dst.data(), dst.size());
+
+  if (!oldProtoDSBlockHeader.IsInitialized()) {
+    LOG_GENERAL(WARNING,
+                "ProtoDSBlock::OldDSBlockHeader initialization failed");
+    return;
+  }
+  LOG_GENERAL(INFO, "ProtoDSBlock::OldDSBlockHeader initialization success");
+
+  LOG_GENERAL(INFO, "Size of oldProtoDSBlockHeader.dswinners "
+                        << oldProtoDSBlockHeader.dswinners_size());
+
+  DSBlockHeader dsBlockHeader;
+
+  std::map<PubKey, Peer> oldDSPoWWinners;
+  PubKey tempPubKey;
+  Peer tempWinnerNetworkInfo;
+  for (const auto& dswinner : oldProtoDSBlockHeader.dswinners()) {
+    ProtobufByteArrayToSerializable(dswinner.key(), tempPubKey);
+    ProtobufByteArrayToSerializable(dswinner.val(), tempWinnerNetworkInfo);
+    oldDSPoWWinners[tempPubKey] = tempWinnerNetworkInfo;
+
+    BOOST_REQUIRE(dsPoWWinners.find(tempPubKey) != dsPoWWinners.end());
+  }
+
+  LOG_GENERAL(INFO, "Size of oldDSPoWWinners " << oldDSPoWWinners.size());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
