@@ -306,6 +306,10 @@ const unsigned int COMM_SIZE{
     ReadConstantNumeric("COMM_SIZE", "node.network_composition.")};
 const unsigned int NUM_DS_ELECTION{
     ReadConstantNumeric("NUM_DS_ELECTION", "node.network_composition.")};
+const double DS_PERFORMANCE_THRESHOLD_PERCENT{ReadConstantDouble(
+    "DS_PERFORMANCE_THRESHOLD_PERCENT", "node.network_composition.")};
+const unsigned int NUM_DS_BYZANTINE_REMOVED{ReadConstantNumeric(
+    "NUM_DS_BYZANTINE_REMOVED", "node.network_composition.")};
 const unsigned int SHARD_SIZE_TOLERANCE_LO{ReadConstantNumeric(
     "SHARD_SIZE_TOLERANCE_LO", "node.network_composition.")};
 const unsigned int SHARD_SIZE_TOLERANCE_HI{ReadConstantNumeric(
@@ -393,6 +397,8 @@ const unsigned int TXN_DS_TARGET_NUM{
     ReadConstantNumeric("TXN_DS_TARGET_NUM", "node.pow.")};
 const unsigned int PRIORITY_TOLERANCE_IN_PERCENT{
     ReadConstantNumeric("PRIORITY_TOLERANCE_IN_PERCENT", "node.pow.")};
+const unsigned int ENABLE_NEW_FEATURE_DS_NUM{
+    ReadConstantNumeric("ENABLE_NEW_FEATURE_DS_NUM", "node.pow.")};
 
 // Recovery and upgrading constants
 const unsigned int WAIT_LOOKUP_WAKEUP_IN_SECONDS{

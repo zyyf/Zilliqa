@@ -259,6 +259,8 @@ extern const unsigned int NUM_SHARD_PEER_TO_REVEAL;
 // Network composition constants
 extern const unsigned int COMM_SIZE;
 extern const unsigned int NUM_DS_ELECTION;
+extern const double DS_PERFORMANCE_THRESHOLD_PERCENT;
+extern const unsigned int NUM_DS_BYZANTINE_REMOVED;
 extern const unsigned int SHARD_SIZE_TOLERANCE_LO;
 extern const unsigned int SHARD_SIZE_TOLERANCE_HI;
 
@@ -305,6 +307,7 @@ extern const unsigned int TXN_SHARD_TARGET_DIFFICULTY;
 extern const unsigned int TXN_DS_TARGET_DIFFICULTY;
 extern const unsigned int TXN_DS_TARGET_NUM;
 extern const unsigned int PRIORITY_TOLERANCE_IN_PERCENT;
+extern const unsigned int ENABLE_NEW_FEATURE_DS_NUM;
 
 // Recovery and upgrading constants
 extern const unsigned int WAIT_LOOKUP_WAKEUP_IN_SECONDS;
