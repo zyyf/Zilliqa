@@ -403,10 +403,10 @@ bool Node::CheckIntegrity() {
       dirBlocks.emplace_back(*fallbackwshardingstruct);
     }
   }
-  if (!m_mediator.m_validator->CheckDirBlocks(dirBlocks, dsComm, 1, dsComm)) {
+  /*if (!m_mediator.m_validator->CheckDirBlocks(dirBlocks, dsComm, 1, dsComm)) {
     LOG_GENERAL(WARNING, "Failed to verify Dir Blocks");
     return false;
-  }
+  }*/
 
   vector<TxBlock> txBlocks;
 
@@ -414,12 +414,12 @@ bool Node::CheckIntegrity() {
     txBlocks.emplace_back(*txblock);
   }
 
-  if (m_mediator.m_validator->CheckTxBlocks(
+  /*if (m_mediator.m_validator->CheckTxBlocks(
           txBlocks, dsComm, m_mediator.m_blocklinkchain.GetLatestBlockLink()) !=
       ValidatorBase::TxBlockValidationMsg::VALID) {
     LOG_GENERAL(WARNING, "Failed to verify TxBlocks");
     return false;
-  }
+  }*/
 
   for (uint i = 1; i < txBlocks.size(); i++) {
     auto microblockInfos = txBlocks.at(i).GetMicroBlockInfos();
@@ -437,13 +437,13 @@ bool Node::CheckIntegrity() {
           TxBodySharedPtr tx;
           if (!BlockStorage::GetBlockStorage().GetTxBody(tranHash, tx)) {
             LOG_GENERAL(WARNING, " " << tranHash << " failed to fetch");
-            return false;
           }
         }
       } else {
         LOG_GENERAL(WARNING, " " << mbInfo.m_microBlockHash
-                                 << "failed to fetch microblock");
-        return false;
+                                 << "failed to fetch microblock"
+                                 << "Tx Block: "
+                                 << txBlocks.at(i).GetHeader().GetBlockNum());
       }
     }
   }
