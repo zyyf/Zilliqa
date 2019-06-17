@@ -17,20 +17,23 @@
 # [MUST BE FILLED IN] User configuration settings
 
 
-binaryPath="/usr/local"
+binaryPath="/home/kaustubh/Documents/ZILStuff/main-rep/patch_missing_mb/Zilliqa"
 patchDBPath="patchDB"
-mbHash="" ##Fill in
+mbHash="$*"
+mbHash=$(echo $mbHash)
 
-echo -n "Enter the full path of your zilliqa source code directory: " && read path_read && [ -n "$path_read" ] && binaryPath=$path_read
+echo "$binaryPath $patchDBPath $mbHash"
+ 
+#echo -n "Enter the full path of your zilliqa source code directory: " && read path_read && [ -n "$path_read" ] && binaryPath=$path_read
 
-if [ -z "$binaryPath" ] || ([ ! -x $binaryPath/build/src/cmd/patchDB ] && [ ! -x $binaryPath/src/cmd/patchDB ]); then
+if [ -z "$binaryPath" ] || ([ ! -x $binaryPath/build/bin/patchDB ] && [ ! -x $binaryPath/src/cmd/patchDB ]); then
     echo "Cannot find patchDB binary on the path you specified"
     exit 1
 fi
 
-if [ -x $binaryPath/build/src/cmd/patchDB ]; then
-    $binaryPath/build/src/cmd/patchDB "${patchDBPath}/persistence" "$mbHash"
+if [ -x $binaryPath/build/bin/patchDB ]; then
+    $binaryPath/build/bin/patchDB "${patchDBPath}/persistence" $mbHash
 elif [ -x  $binaryPath/src/cmd/patchDB ]; then
-   $binaryPath/src/cmd/patchDB "${patchDBPath}/persistence" "$mbHash"
+   $binaryPath/src/cmd/patchDB "${patchDBPath}/persistence" $mbHash
 fi
 
