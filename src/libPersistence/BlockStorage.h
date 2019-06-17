@@ -191,6 +191,9 @@ class BlockStorage : public Singleton<BlockStorage> {
   bool GetMicroBlock(const BlockHash& blockHash,
                      MicroBlockSharedPtr& microblock);
 
+  /// Check if Tx body exists in storage
+  bool TxBodyExists(const dev::h256& key);
+
   // /// Retrieves the range Micro blocks
   bool GetRangeMicroBlocks(const uint64_t lowEpochNum,
                            const uint64_t hiEpochNum, const uint32_t loShardId,

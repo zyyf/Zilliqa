@@ -189,6 +189,11 @@ bool BlockStorage::GetMicroBlock(const BlockHash& blockHash,
   return true;
 }
 
+bool BlockStorage::TxBodyExists(const dev::h256& key) {
+  shared_lock<shared_timed_mutex> g(m_mutexTxBody);
+  return !m_txBodyDB->Lookup(key).empty();
+}
+
 bool BlockStorage::GetRangeMicroBlocks(const uint64_t lowEpochNum,
                                        const uint64_t hiEpochNum,
                                        const uint32_t loShardId,

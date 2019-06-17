@@ -60,6 +60,28 @@ int main(int argc, char* argv[]) {
     } else {
       cout << "Sucessfully Put " << blockhash << " in original DB" << endl;
     }
+
+    // Get all the transactions associated with this microblock
+    const vector<TxnHash>& txhashes = mbptr->GetTranHashes();
+
+    // For each transaction
+    for (const auto& txhash : txhashes) {
+      // If we don't have its body
+      if (!BlockStorage::GetBlockStorage().TxBodyExists(txhash)) {
+        TxBodySharedPtr tbptr;
+        // If the reference historical DB also doesn't have it, report error and
+        // continue
+        if (!BlockStorage::GetBlockStorage().GetTxnFromHistoricalDB(txhash,
+                                                                    tbptr)) {
+          cout << "Txn " << txhash << " not available";
+          continue;
+        }
+        // If the reference historical DB has it, store body
+        bytes serializedTxBody;
+        tbptr->Serialize(serializedTxBody, 0);
+        BlockStorage::GetBlockStorage().PutTxBody(txhash, serializedTxBody);
+      }
+    }
   }
 
   return 0;
