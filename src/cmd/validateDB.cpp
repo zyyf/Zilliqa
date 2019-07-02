@@ -55,6 +55,9 @@ int main() {
   if (GUARD_MODE) {
     Guard::GetInstance().Init();
   }
+  if (!BlockStorage::GetBlockStorage().RefreshAll()) {
+    LOG_GENERAL(WARNING, "BlockStorage::RefreshAll failed");
+  }
   mediator.RegisterColleagues(nullptr, &node, nullptr, vd.get());
 
   if (node.CheckIntegrity()) {
