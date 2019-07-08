@@ -483,7 +483,12 @@ void DirectoryService::RejoinAsDS(bool modeCheck) {
       (m_mode == BACKUP_DS || !modeCheck)) {
     auto func = [this]() mutable -> void {
       while (true) {
-        m_mediator.m_lookup->SetSyncType(SyncType::DS_SYNC);
+        if (Guard::GetInstance().IsNodeInDSGuardList(
+                m_mediator.m_selfKey.second)) {
+          m_mediator.m_lookup->SetSyncType(SyncType::GUARD_DS_SYNC);
+        } else {
+          m_mediator.m_lookup->SetSyncType(SyncType::DS_SYNC);
+        }
         m_mediator.m_node->CleanVariables();
         this->CleanVariables();
         while (!m_mediator.m_node->DownloadPersistenceFromS3()) {
