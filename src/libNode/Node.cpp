@@ -723,10 +723,10 @@ bool Node::StartRetrieveHistory(const SyncType syncType,
   bool bInShardStructure = false;
 
   if (bDS) {
-    m_myshardId = m_mediator.m_ds->m_shards.size();
+    m_myshardId = m_mediator.m_ds->GetNumShards();
   } else {
     for (unsigned int i = 0;
-         i < m_mediator.m_ds->m_shards.size() && !bInShardStructure; ++i) {
+         i < m_mediator.m_ds->GetNumShards() && !bInShardStructure; ++i) {
       for (const auto& shardNode : m_mediator.m_ds->m_shards.at(i)) {
         if (get<SHARD_NODE_PUBKEY>(shardNode) == m_mediator.m_selfKey.second) {
           SetMyshardId(i);
@@ -767,7 +767,7 @@ bool Node::StartRetrieveHistory(const SyncType syncType,
             m_mediator.m_dsBlockChain.GetLastBlock().GetHeader().GetEpochNum(),
             m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum() +
                 1,
-            0, m_mediator.m_ds->m_shards.size(), microBlocks)) {
+            0, m_mediator.m_ds->GetNumShards(), microBlocks)) {
       for (const auto& microBlock : microBlocks) {
         LOG_GENERAL(INFO,
                     "Retrieve microblock with epochNum: "

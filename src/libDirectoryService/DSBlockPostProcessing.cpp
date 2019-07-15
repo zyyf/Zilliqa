@@ -417,7 +417,7 @@ void DirectoryService::StartFirstTxEpoch() {
     }
 
     // m_mediator.m_node->m_myshardId = std::numeric_limits<uint32_t>::max();
-    m_mediator.m_node->m_myshardId = m_shards.size();
+    m_mediator.m_node->m_myshardId = GetNumShards();
     m_mediator.m_node->m_justDidFallback = false;
     m_mediator.m_node->CommitTxnPacketBuffer();
     m_stateDeltaFromShards.clear();
@@ -475,7 +475,7 @@ void DirectoryService::StartFirstTxEpoch() {
 
     // I need to know my shard ID -> iterate through m_shards
     bool found = false;
-    for (unsigned int i = 0; i < m_shards.size() && !found; i++) {
+    for (unsigned int i = 0; i < GetNumShards() && !found; i++) {
       for (const auto& shardNode : m_shards.at(i)) {
         if (std::get<SHARD_NODE_PUBKEY>(shardNode) ==
             m_mediator.m_selfKey.second) {
@@ -574,7 +574,7 @@ void DirectoryService::ProcessDSBlockConsensusWhenDone() {
     ClearReputationOfNodeFailToJoin(m_shards, m_mapNodeReputation);
   }
 
-  m_mediator.m_node->m_myshardId = m_shards.size();
+  m_mediator.m_node->m_myshardId = GetNumShards();
   if (!BlockStorage::GetBlockStorage().PutShardStructure(
           m_shards, m_mediator.m_node->m_myshardId)) {
     LOG_GENERAL(WARNING, "BlockStorage::PutShardStructure failed");

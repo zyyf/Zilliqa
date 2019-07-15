@@ -682,7 +682,7 @@ void Node::UpdateBalanceForPreGeneratedAccounts() {
   LOG_MARKER();
   int counter = 0;
   for (unsigned int i = 0; i < m_populatedAddresses.size(); i++) {
-    if ((i % (m_mediator.m_ds->m_shards.size() + 1) == m_myshardId) &&
+    if ((i % (m_mediator.m_ds->GetNumShards() + 1) == m_myshardId) &&
         (i % NUM_FINAL_BLOCK_PER_POW ==
          (m_mediator.m_currentEpochNum % NUM_FINAL_BLOCK_PER_POW))) {
       AccountStore::GetInstance().IncreaseBalanceTemp(

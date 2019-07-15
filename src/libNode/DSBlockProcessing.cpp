@@ -194,13 +194,13 @@ bool Node::LoadShardingStructure(bool callByRetrieve) {
     return true;
   }
 
-  m_numShards = m_mediator.m_ds->m_shards.size();
+  m_numShards = m_mediator.m_ds->GetNumShards();
 
   // Check the shard ID against the deserialized structure
-  if (m_myshardId >= m_mediator.m_ds->m_shards.size()) {
+  if (m_myshardId >= m_mediator.m_ds->GetNumShards()) {
     LOG_EPOCH(WARNING, m_mediator.m_currentEpochNum,
               "Shard ID " << m_myshardId << " >= num shards "
-                          << m_mediator.m_ds->m_shards.size());
+                          << m_mediator.m_ds->GetNumShards());
     return false;
   }
 

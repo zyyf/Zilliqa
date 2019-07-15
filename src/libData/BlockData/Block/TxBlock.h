@@ -32,11 +32,12 @@ struct MicroBlockInfo {
   BlockHash m_microBlockHash;
   TxnHash m_txnRootHash;
   uint32_t m_shardId{};
+  bool m_isDS;
 
   bool operator==(const MicroBlockInfo& mbInfo) const {
-    return std::tie(m_microBlockHash, m_txnRootHash, m_shardId) ==
+    return std::tie(m_microBlockHash, m_txnRootHash, m_shardId, m_isDS) ==
            std::tie(mbInfo.m_microBlockHash, mbInfo.m_txnRootHash,
-                    mbInfo.m_shardId);
+                    mbInfo.m_shardId, mbInfo.m_isDS);
   }
   bool operator<(const MicroBlockInfo& mbInfo) const {
     return std::tie(mbInfo.m_microBlockHash, mbInfo.m_txnRootHash,
@@ -52,7 +53,8 @@ inline std::ostream& operator<<(std::ostream& os, const MicroBlockInfo& t) {
   os << "<MicroBlockInfo>" << std::endl
      << " t.m_microBlockHash = " << t.m_microBlockHash << std::endl
      << " t.m_txnRootHash    = " << t.m_txnRootHash << std::endl
-     << " t.m_shardId        = " << t.m_shardId;
+     << " t.m_shardId        = " << t.m_shardId << std::endl
+     << " t.m_isDS           = " << t.m_isDS;
   return os;
 }
 

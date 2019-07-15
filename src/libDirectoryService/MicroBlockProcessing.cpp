@@ -56,7 +56,7 @@ bool DirectoryService::VerifyMicroBlockCoSignature(const MicroBlock& microBlock,
   unsigned int index = 0;
   unsigned int count = 0;
 
-  if (shardId == m_shards.size()) {
+  if (shardId == GetNumShards()) {
     if (m_mediator.m_DSCommittee->size() != B2.size()) {
       LOG_GENERAL(WARNING, "Mismatch: Shard(DS) size = "
                                << m_mediator.m_DSCommittee->size()
@@ -300,7 +300,7 @@ bool DirectoryService::ProcessMicroblockSubmissionFromShardCore(
     return false;
   }
 
-  if (microBlock.GetHeader().GetShardId() != m_shards.size() &&
+  if (microBlock.GetHeader().GetShardId() != GetNumShards() &&
       !SaveCoinbase(microBlock.GetB1(), microBlock.GetB2(),
                     microBlock.GetHeader().GetShardId(),
                     m_mediator.m_currentEpochNum)) {
@@ -328,9 +328,9 @@ bool DirectoryService::ProcessMicroblockSubmissionFromShardCore(
 
   LOG_EPOCH(INFO, m_mediator.m_currentEpochNum,
             microBlocksAtEpoch.size()
-                << " of " << m_shards.size() << " microblocks received");
+                << " of " << GetNumShards() << " microblocks received");
 
-  if (microBlocksAtEpoch.size() == m_shards.size()) {
+  if (microBlocksAtEpoch.size() == GetNumShards()) {
     LOG_STATE("[MIBLK][" << std::setw(15) << std::left
                          << m_mediator.m_selfPeer.GetPrintableIPAddress()
                          << "][" << m_mediator.m_currentEpochNum
@@ -559,7 +559,7 @@ bool DirectoryService::ProcessMissingMicroblockSubmission(
       const PubKey& pubKey = microBlocks.at(i).GetHeader().GetMinerPubKey();
 
       // Check public key - shard ID mapping
-      if (shardId == m_shards.size()) {
+      if (shardId == GetNumShards()) {
         // DS shard
         bool found = false;
         for (const auto& ds : *m_mediator.m_DSCommittee) {
@@ -634,7 +634,7 @@ bool DirectoryService::ProcessMissingMicroblockSubmission(
       LOG_GENERAL(INFO, "MicroBlock hash = "
                             << microBlocks.at(i).GetHeader().GetHashes());
 
-      if (microBlocks.at(i).GetHeader().GetShardId() != m_shards.size()) {
+      if (microBlocks.at(i).GetHeader().GetShardId() != GetNumShards()) {
         if (!SaveCoinbase(microBlocks[i].GetB1(), microBlocks[i].GetB2(),
                           microBlocks[i].GetHeader().GetShardId(),
                           m_mediator.m_currentEpochNum)) {
@@ -665,7 +665,7 @@ bool DirectoryService::ProcessMissingMicroblockSubmission(
       // m_fetchedMicroBlocks.emplace(microBlock);
 
       LOG_GENERAL(INFO, microBlocksAtEpoch.size()
-                            << " of " << m_shards.size()
+                            << " of " << GetNumShards()
                             << " microblocks received for Epoch "
                             << epochNumber);
     }

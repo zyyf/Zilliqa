@@ -98,7 +98,8 @@ void DirectoryService::ExtractDataFromMicroblocks(
 
     mbInfos.push_back({microBlock.GetBlockHash(),
                        microBlock.GetHeader().GetTxRootHash(),
-                       microBlock.GetHeader().GetShardId()});
+                       microBlock.GetHeader().GetShardId(),
+                       microBlock.GetHeader().GetShardId() == GetNumShards()});
   }
 }
 
@@ -415,8 +416,15 @@ bool DirectoryService::CheckMicroBlocks(bytes& errorMsg, bool fromShards,
     // If its slow on benchmarking, may be first populate an unordered_set and
     // then std::find
     for (const auto& info : m_finalBlock->GetMicroBlockInfos()) {
-      if (info.m_shardId == m_shards.size()) {
-        continue;
+      if (info.m_isDS) {
+        if (info.m_shardId == GetNumShards()) {
+          continue;
+        } else {
+          LOG_GENERAL(WARNING, "Wrongly defined isDS for this mbinfo, shardId: "
+                                   << info.m_shardId
+                                   << " shard size: " << GetNumShards());
+          return false;
+        }
       }
 
       BlockHash hash = info.m_microBlockHash;
@@ -664,7 +672,7 @@ bool DirectoryService::OnNodeMissingMicroBlocks(const bytes& errorMsg,
       }
     }
 
-    if (microBlockIter->GetHeader().GetShardId() == m_shards.size()) {
+    if (microBlockIter->GetHeader().GetShardId() == GetNumShards()) {
       LOG_GENERAL(WARNING, "Ignore the fetching of DS microblock");
       continue;
     }
@@ -904,7 +912,7 @@ bool DirectoryService::CheckMicroBlockValidity(bytes& errorMsg) {
   MicroBlockInfo mbInfo{
       m_mediator.m_node->m_microblock->GetBlockHash(),
       m_mediator.m_node->m_microblock->GetHeader().GetTxRootHash(),
-      m_mediator.m_node->m_microblock->GetHeader().GetShardId()};
+      m_mediator.m_node->m_microblock->GetHeader().GetShardId(), true};
 
   // Check whether microblock is in TxBlock
   if (m_finalBlock->GetMicroBlockInfos().end() ==
@@ -1223,7 +1231,7 @@ void DirectoryService::RemoveDSMicroBlock() {
   auto& microBlocksAtEpoch = m_microBlocks[m_mediator.m_currentEpochNum];
   auto dsmb = find_if(microBlocksAtEpoch.begin(), microBlocksAtEpoch.end(),
                       [this](const MicroBlock& mb) -> bool {
-                        return mb.GetHeader().GetShardId() == m_shards.size();
+                        return mb.GetHeader().GetShardId() == GetNumShards();
                       });
   if (dsmb != microBlocksAtEpoch.end()) {
     LOG_GENERAL(INFO, "Removed DS microblock from list of microblocks");
