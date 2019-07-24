@@ -507,14 +507,14 @@ class Node : public Executable {
   void CallActOnFinalblock();
 
   void ProcessTransactionWhenShardLeader(
-      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT);
+      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT_SHARD);
   void ProcessTransactionWhenShardBackup(
-      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT);
+      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT_SHARD);
   bool ComposeMicroBlock(
-      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT);
+      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT_SHARD);
   bool CheckMicroBlockValidity(
       bytes& errorMsg,
-      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT);
+      const uint64_t& microblock_gas_limit = MICROBLOCK_GAS_LIMIT_SHARD);
   bool OnNodeMissingTxns(const bytes& errorMsg, const unsigned int offset,
                          const Peer& from);
 
