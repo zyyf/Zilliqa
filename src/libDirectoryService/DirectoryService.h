@@ -377,8 +377,6 @@ class DirectoryService : public Executable {
                            const uint64_t blockNumber, const bytes& blockHash,
                            const uint16_t leaderID, const PubKey& leaderKey,
                            bytes& messageToCosign);
-  bool CheckUseVCBlockInsteadOfDSBlock(const BlockLink& bl,
-                                       VCBlockSharedPtr& prevVCBlockptr);
   bool StoreFinalBlockToDisk();
 
   bool OnNodeFinalConsensusError(const bytes& errorMsg, const Peer& from);
@@ -527,6 +525,9 @@ class DirectoryService : public Executable {
   /// Force multicast when sending block to shard
   std::atomic<bool> m_forceMulticast{};
 
+  /// microblock_gas_limit to be adjusted due to vc
+  uint64_t m_microblock_gas_limit = MICROBLOCK_GAS_LIMIT;
+
   /// Constructor. Requires mediator reference to access Node and other global
   /// members.
   DirectoryService(Mediator& mediator);
@@ -625,6 +626,9 @@ class DirectoryService : public Executable {
   // Get entire network peer info
   void GetEntireNetworkPeerInfo(VectorOfNode& peers,
                                 std::vector<PubKey>& pubKeys);
+
+  bool CheckUseVCBlockInsteadOfDSBlock(const BlockLink& bl,
+                                       VCBlockSharedPtr& prevVCBlockptr);
 
   std::string GetStateString() const;
 
