@@ -1458,7 +1458,9 @@ bool Lookup::AddMicroBlockToStorage(const MicroBlock& microblock) {
   return true;
 }
 
+#if 0  // clark
 // Unused code
+#endif
 bool Lookup::ProcessGetMicroBlockFromLookup(
     [[gnu::unused]] const bytes& message, [[gnu::unused]] unsigned int offset,
     [[gnu::unused]] const Peer& from) {
@@ -1523,8 +1525,9 @@ bool Lookup::ProcessGetMicroBlockFromLookup(
   // P2PComm::GetInstance().SendMessage(requestingNode, retMsg);
   // return true;
 }
-
+#if 0  // clark
 // Unused code
+#endif
 bool Lookup::ProcessSetMicroBlockFromLookup(
     [[gnu::unused]] const bytes& message, [[gnu::unused]] unsigned int offset,
     [[gnu::unused]] const Peer& from) {
@@ -1555,8 +1558,9 @@ bool Lookup::ProcessSetMicroBlockFromLookup(
 
   // return true;
 }
-
+#if 0  // clark
 // UNUSED
+#endif
 void Lookup::SendGetMicroBlockFromLookup(const vector<BlockHash>& mbHashes) {
   bytes msg = {MessageType::LOOKUP,
                LookupInstructionType::GETMICROBLOCKFROMLOOKUP};

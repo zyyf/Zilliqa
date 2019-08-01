@@ -300,6 +300,17 @@ class Lookup : public Executable {
                                 [[gnu::unused]] const Peer& from);
   void SendGetTxnFromLookup(const std::vector<TxnHash>& txnhashes);
 
+#if 1  // clark
+  void SendGetMicroBlockFromLookup(const std::vector<BlockHash>& mbHashes);
+
+  bool ProcessGetMicroBlockFromLookup([[gnu::unused]] const bytes& message,
+                                      [[gnu::unused]] unsigned int offset,
+                                      [[gnu::unused]] const Peer& from);
+
+  bool ProcessSetMicroBlockFromLookup([[gnu::unused]] const bytes& message,
+                                      [[gnu::unused]] unsigned int offset,
+                                      [[gnu::unused]] const Peer& from);
+#else
   // UNUSED
   void SendGetMicroBlockFromLookup(const std::vector<BlockHash>& mbHashes);
 
@@ -311,6 +322,7 @@ class Lookup : public Executable {
   bool ProcessSetMicroBlockFromLookup([[gnu::unused]] const bytes& message,
                                       [[gnu::unused]] unsigned int offset,
                                       [[gnu::unused]] const Peer& from);
+#endif
   bool AddMicroBlockToStorage(const MicroBlock& microblock);
 
   bool ProcessGetOfflineLookups(const bytes& message, unsigned int offset,
